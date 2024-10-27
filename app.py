@@ -1,9 +1,40 @@
+import logging
+from logging.handlers import TimedRotatingFileHandler
+
+# Inizializza il logger globale
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)  # Livello di default
+
+# Formattazione dei log
+log_format = logging.Formatter(
+    '%(asctime)s - %(levelname)s - %(module)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+# File handler con rotazione
+file_handler = TimedRotatingFileHandler(
+    'app.log',
+    when='midnight',
+    interval=1,
+    backupCount=7,
+    encoding='utf-8'
+)
+file_handler.setFormatter(log_format)
+logger.addHandler(file_handler)
+
+# Console handler
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(log_format)
+logger.addHandler(console_handler)
+
+
 import ttkbootstrap as ttk
 from tkinter.constants import *
 from ttkbootstrap.constants import *
 from ttkbootstrap.dialogs import Querybox
 from ttkbootstrap.dialogs import Messagebox
 from ttkbootstrap.widgets import Progressbar
+from tkinter import filedialog
 import subprocess
 from aws_manager import AWSManager
 import threading
@@ -20,38 +51,54 @@ import socket
 import tkinter as tk
 import os
 import sys
+import webbrowser
+from tkinter import Menu
 
 from PIL import Image, ImageTk  # Assicurati di avere Pillow installato per ridimensionare le immagini
 
+# def setup_logging(log_level):
+#     logger = logging.getLogger()
+#     logger.setLevel(log_level)
+
+#     # File handler
+#     file_handler = TimedRotatingFileHandler('app.log', when='midnight', interval=1, backupCount=3)
+#     file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     file_handler.setFormatter(file_formatter)
+#     logger.addHandler(file_handler)
+
+#     # Console handler
+#     console_handler = logging.StreamHandler()
+#     console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+#     console_handler.setFormatter(console_formatter)
+#     logger.addHandler(console_handler)
+
+#     return logger
+
+# # Load preferences and set up logging
+# try:
+#     with open('preferences.json', 'r') as f:
+#         preferences = json.load(f)
+#     log_level = preferences.get('log_level', 'DEBUG')
+# except FileNotFoundError:
+#     log_level = 'DEBUG'
+#     preferences = {}
+
+# log_level = getattr(logging, log_level)
+# logger = setup_logging(log_level)
+
+
 def setup_logging(log_level):
-    logger = logging.getLogger()
+    """Aggiorna il livello del logger esistente."""
+    global logger
     logger.setLevel(log_level)
-
-    # File handler
-    file_handler = TimedRotatingFileHandler('app.log', when='midnight', interval=1, backupCount=3)
-    file_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    file_handler.setFormatter(file_formatter)
-    logger.addHandler(file_handler)
-
-    # Console handler
-    console_handler = logging.StreamHandler()
-    console_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(console_formatter)
-    logger.addHandler(console_handler)
-
+    
+    # Aggiorna il livello per tutti gli handler
+    for handler in logger.handlers:
+        handler.setLevel(log_level)
+    
     return logger
 
-# Load preferences and set up logging
-try:
-    with open('preferences.json', 'r') as f:
-        preferences = json.load(f)
-    log_level = preferences.get('log_level', 'DEBUG')
-except FileNotFoundError:
-    log_level = 'DEBUG'
-    preferences = {}
 
-log_level = getattr(logging, log_level)
-logger = setup_logging(log_level)
 
 class SplashScreen(tk.Toplevel):
     def __init__(self, parent):
@@ -92,8 +139,8 @@ class AWSThread(threading.Thread):
                 #self.manager.after(0, self.manager.show_loading, "Fetching instances...")
                 instances = self.manager.aws_manager.list_ssm_instances()
                 self.manager.after(0, self.manager.update_instances, instances)
-                is_connected = self.manager.aws_manager.check_connection()
-                self.manager.after(0, self.manager.update_connection_status, is_connected)
+                #is_connected = self.manager.aws_manager.check_connection()
+                #self.manager.after(0, self.manager.update_connection_status, is_connected)
             except Exception as e:
                 logger.error(f"Error in AWSThread: {str(e)}")
                 self.manager.after(0, self.manager.show_error, f"Error: {str(e)}")
@@ -108,6 +155,20 @@ class AWSThread(threading.Thread):
 class AWSSSMManagerApp(ttk.Window):
     def __init__(self):
         super().__init__(themename="cosmo")
+        # Imposta l'icona della finestra
+        try:
+            # Ottieni il widget root Tk sottostante
+            root = self.master
+            # Imposta l'icona per entrambi
+            icon_path = resource_path('icon.ico')
+            self.iconbitmap(resource_path('icon.ico'))
+            root.iconbitmap(icon_path)
+            # Opzionale: imposta anche l'icona per le finestre di dialogo
+            self.tk.call('wm', 'iconphoto', self._w, tk.PhotoImage(file=resource_path('icon.ico')))
+            
+        except Exception as e:
+            logger.warning(f"Impossibile caricare l'icona: {e}")
+            
         self.withdraw()  # Nascondi la finestra principale
         self.splash = SplashScreen(self)
         self.loading_frame = None
@@ -116,10 +177,214 @@ class AWSSSMManagerApp(ttk.Window):
         self.active_connections = []
         self.aws_manager = AWSManager()
         self.aws_thread = None
-
+        # Carica le preferenze prima di creare il menu
+        self.load_preferences()
+        
+        # Crea il menu
+        self.create_menu()
+        
         # Avvia il caricamento dell'app in modo asincrono
         self.after(100, self.load_app)
     
+    
+    
+    def create_menu(self):
+        """Crea la barra dei menu principale."""
+        menubar = Menu(self)
+        self.config(menu=menubar)
+        
+        # Menu File
+        file_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Quit", command=self.on_closing)
+        
+        # Menu Settings
+        settings_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Settings", menu=settings_menu)
+        
+        # Aggiunta opzione per visualizzare i log
+        settings_menu.add_command(label="View Logs", command=self.show_logs)        
+        
+        # Menu Help
+        help_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self.show_about)
+    
+    def show_about(self):
+        """Mostra la finestra About."""
+        about_window = ttk.Toplevel(self)
+        about_window.title("About AWS SSM Manager")
+        about_window.geometry("400x250")
+        
+        # Rendi la finestra modale
+        about_window.transient(self)
+        about_window.grab_set()
+        
+        # Frame principale
+        frame = ttk.Frame(about_window, padding=20)
+        frame.pack(fill='both', expand=True)
+        
+        # Titolo
+        title_label = ttk.Label(frame, 
+                              text="AWS SSM Manager", 
+                              font=('Helvetica', 16, 'bold'))
+        title_label.pack(pady=(0,10))
+        
+        # Sviluppatore
+        dev_label = ttk.Label(frame, 
+                            text="Developed by Mauro Arduini in his spare time.",
+                            wraplength=350)
+        dev_label.pack(pady=(0,20))
+        
+        # Links
+        def create_link_label(frame, text, url):
+            link = ttk.Label(frame, 
+                           text=text,
+                           cursor="hand2",
+                           font=('Helvetica', 10, 'underline'),
+                           foreground='blue')
+            link.pack(pady=5)
+            link.bind("<Button-1>", lambda e: webbrowser.open_new(url))
+            return link
+        
+        # GitHub link
+        create_link_label(frame, 
+                         "GitHub Repository",
+                         "https://github.com/mauroo82/ssm-manager")
+        
+        # LinkedIn link
+        create_link_label(frame, 
+                         "LinkedIn Profile",
+                         "https://www.linkedin.com/in/mauro-arduini-0aa86621/")
+        
+        # Pulsante Chiudi
+        close_button = ttk.Button(frame, 
+                                text="Close", 
+                                command=about_window.destroy,
+                                style="primary")
+        close_button.pack(pady=(20,0))
+        
+        # Centra la finestra
+        about_window.update_idletasks()
+        width = about_window.winfo_width()
+        height = about_window.winfo_height()
+        x = (about_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (about_window.winfo_screenheight() // 2) - (height // 2)
+        about_window.geometry(f"{width}x{height}+{x}+{y}")
+        
+    
+        
+        
+        
+        
+    def show_logs(self):
+        """Mostra una finestra con i log recenti."""
+        log_window = ttk.Toplevel(self)
+        log_window.title("Application Logs")
+        log_window.geometry("800x600")
+        
+        # Frame principale
+        main_frame = ttk.Frame(log_window, padding=10)
+        main_frame.pack(fill='both', expand=True)
+        
+        # Aggiungi il messaggio informativo in alto
+        info_frame = ttk.Frame(main_frame)
+        info_frame.pack(fill='x', pady=(0, 10))
+        
+        info_text = "Note: To change the log level, modify the 'log_level' value in preferences.json file."
+        info_label = ttk.Label(
+            info_frame, 
+            text=info_text,
+            font=('Helvetica', 9, 'italic'),
+            foreground='gray'
+        )
+        info_label.pack(side='left', padx=5)
+        
+        # Area di testo per i log con scrollbar
+        text_frame = ttk.Frame(main_frame)
+        text_frame.pack(fill='both', expand=True)
+        
+        scrollbar = ttk.Scrollbar(text_frame)
+        scrollbar.pack(side='right', fill='y')
+        
+        log_text = tk.Text(text_frame, wrap='word', yscrollcommand=scrollbar.set)
+        log_text.pack(side='left', fill='both', expand=True)
+        
+        scrollbar.config(command=log_text.yview)
+        
+        # Bottoni per le azioni
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill='x', pady=(10,0))
+        
+        def refresh_logs():
+            try:
+                with open('app.log', 'r') as f:
+                    logs = f.read()
+                log_text.delete(1.0, tk.END)
+                log_text.insert(tk.END, logs)
+                log_text.see(tk.END)  # Scorre alla fine
+            except Exception as e:
+                log_text.delete(1.0, tk.END)
+                log_text.insert(tk.END, f"Error reading log file: {str(e)}")
+        
+        def clear_logs():
+            if Messagebox.yesno("Clear Logs", "Are you sure you want to clear the logs?"):
+                try:
+                    open('app.log', 'w').close()  # Pulisce il file
+                    refresh_logs()
+                    logger.info("Logs cleared by user")
+                except Exception as e:
+                    Messagebox.show_error(f"Error clearing logs: {str(e)}")
+        
+        def save_logs():
+            try:
+                file_path = filedialog.asksaveasfilename(
+                    defaultextension=".log",
+                    filetypes=[("Log files", "*.log"), ("Text files", "*.txt"), ("All files", "*.*")],
+                    initialfile="app_logs.log"
+                )
+                if file_path:
+                    with open('app.log', 'r') as source, open(file_path, 'w') as target:
+                        target.write(source.read())
+                    logger.info(f"Logs saved to {file_path}")
+                    Messagebox.show_info("Logs saved successfully")
+            except Exception as e:
+                Messagebox.show_error(f"Error saving logs: {str(e)}")
+        
+        # Aggiunta bottoni
+        ttk.Button(button_frame, text="Refresh", command=refresh_logs).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Clear Logs", command=clear_logs).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Save Logs", command=save_logs).pack(side='left', padx=5)
+        ttk.Button(button_frame, text="Close", command=log_window.destroy).pack(side='right', padx=5)
+        
+        # Carica i log iniziali
+        refresh_logs()
+        
+        # Centra la finestra
+        log_window.update_idletasks()
+        width = log_window.winfo_width()
+        height = log_window.winfo_height()
+        x = (log_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (log_window.winfo_screenheight() // 2) - (height // 2)
+        log_window.geometry(f"{width}x{height}+{x}+{y}")
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         
     # def hide_loading_frame(self):
     #     if self.loading_frame:
@@ -231,12 +496,12 @@ class AWSSSMManagerApp(ttk.Window):
         self.splash.destroy()
         self.deiconify()  # Mostra la finestra principale
         
-    def on_closing(self):
-        if Messagebox.yesno("Quit", "Do you want to quit?"):
-            if self.aws_thread:
-                self.aws_thread.stop()
-                self.aws_thread.join()
-            self.destroy()    
+    # def on_closing(self):
+    #     if Messagebox.yesno("Quit", "Do you want to quit?"):
+    #         if self.aws_thread:
+    #             self.aws_thread.stop()
+    #             self.aws_thread.join()
+    #         self.destroy()    
 
     def configure_styles(self, style):
                 
@@ -341,14 +606,47 @@ class AWSSSMManagerApp(ttk.Window):
 
         # Frame per le istanze (al centro)
         self.create_instances_frame(main_frame)
-
+        #spacer_frame = ttk.Frame(main_frame, height=20)  # Altezza regolabile per maggiore o minore spazio
+        #spacer_frame.pack(fill=X)
         # Frame per le connessioni attive (in basso)
         self.create_active_connections_frame(main_frame)
 
         # Label di caricamento (in fondo)
         self.create_loading_label(main_frame)
+        #self.copy_icon = ImageTk.PhotoImage(Image.open("copy_icon.png").resize((15, 15), Image.LANCZOS))
         print("Fine create_widgets")
 
+    # def create_profile_region_inputs(self, parent):
+    #     input_frame = ttk.Frame(parent, style="ProfileRegion.TFrame")
+    #     input_frame.pack(pady=10, padx=10, fill=X)
+
+    #     ttk.Label(input_frame, text="Profile:").grid(row=0, column=0, padx=5, pady=5, sticky=W)
+    #     self.profile_var = ttk.StringVar(value=self.preferences.get('profile', ''))
+    #     self.profile_combo = ttk.Combobox(input_frame, textvariable=self.profile_var, width=15, state="readonly")
+    #     self.profile_combo['values'] = self.aws_manager.get_profiles()
+    #     self.profile_combo.grid(row=0, column=1, padx=5, pady=5, sticky=EW)
+
+    #     ttk.Label(input_frame, text="Region:").grid(row=0, column=2, padx=5, pady=5, sticky=W)
+    #     self.region_var = ttk.StringVar(value=self.preferences.get('region', ''))
+    #     self.region_combo = ttk.Combobox(input_frame, textvariable=self.region_var, width=15, state="readonly")
+    #     self.region_combo['values'] = self.aws_manager.get_regions()
+    #     self.region_combo.grid(row=0, column=3, padx=5, pady=5, sticky=EW)
+
+    #     set_button = ttk.Button(input_frame, text="Connect", command=self.set_profile_and_region, bootstyle=SUCCESS)
+    #     set_button.grid(row=0, column=4, padx=5, pady=5)
+        
+    #     disconnect_button = ttk.Button(input_frame, text="Disconnect", command=self.disconnect_profile_and_region, bootstyle=DANGER)
+    #     disconnect_button.grid(row=0, column=6, padx=5, pady=5)
+        
+    #     refresh_button = ttk.Button(input_frame, text="Refresh", command=self.refresh_profiles_and_regions)
+    #     refresh_button.grid(row=0, column=7, padx=5, pady=5)
+
+    #     self.status_icon = ttk.Label(input_frame, text="⚫", font=('Arial', 16))
+    #     self.status_icon.grid(row=0, column=8, padx=5, pady=5)
+
+    #     input_frame.columnconfigure(1, weight=1)
+    #     input_frame.columnconfigure(3, weight=1)
+        
     def create_profile_region_inputs(self, parent):
         input_frame = ttk.Frame(parent, style="ProfileRegion.TFrame")
         input_frame.pack(pady=10, padx=10, fill=X)
@@ -365,20 +663,41 @@ class AWSSSMManagerApp(ttk.Window):
         self.region_combo['values'] = self.aws_manager.get_regions()
         self.region_combo.grid(row=0, column=3, padx=5, pady=5, sticky=EW)
 
-        set_button = ttk.Button(input_frame, text="Connect", command=self.set_profile_and_region, bootstyle=SUCCESS)
-        set_button.grid(row=0, column=4, padx=5, pady=5)
-        
-        disconnect_button = ttk.Button(input_frame, text="Disconnect", command=self.disconnect_profile_and_region, bootstyle=DANGER)
-        disconnect_button.grid(row=0, column=6, padx=5, pady=5)
-        
-        refresh_button = ttk.Button(input_frame, text="Refresh", command=self.refresh_profiles_and_regions)
-        refresh_button.grid(row=0, column=7, padx=5, pady=5)
+        # Configura il pulsante con la funzione di connessione
+        self.connect_button = ttk.Button(
+            input_frame,
+            text="Connect",
+            command=self.toggle_connection,
+            bootstyle=SUCCESS
+        )
+        self.connect_button.grid(row=0, column=4, padx=5, pady=5)
 
-        self.status_icon = ttk.Label(input_frame, text="⚫", font=('Arial', 16))
-        self.status_icon.grid(row=0, column=8, padx=5, pady=5)
+        refresh_button = ttk.Button(input_frame, text="Refresh", command=self.refresh_profiles_and_regions)
+        refresh_button.grid(row=0, column=5, padx=5, pady=5)
 
         input_frame.columnconfigure(1, weight=1)
         input_frame.columnconfigure(3, weight=1)
+        
+    def toggle_connection(self):
+        if self.connect_button['text'] == "Connect":
+            try:
+                # Tenta di impostare il profilo e la regione
+                self.set_profile_and_region()
+                # Se la connessione ha successo, aggiorna il pulsante
+                self.connect_button.config(text="Disconnect", bootstyle=DANGER)
+            except Exception:
+                # Riporta il pulsante allo stato iniziale e mostra il messaggio di errore
+                self.connect_button.config(text="Connect", bootstyle=SUCCESS)
+                Messagebox.show_error(
+                    "Errore nella connessione. Verifica le autorizzazioni o il login.",
+                    title="Errore di Connessione"
+                )
+        else:
+            # Esegui disconnessione e resetta il pulsante
+            self.disconnect_profile_and_region()
+            self.connect_button.config(text="Connect", bootstyle=SUCCESS)
+
+            
 
     def disconnect_profile_and_region(self):
         # Scollega il profilo e la regione
@@ -407,20 +726,55 @@ class AWSSSMManagerApp(ttk.Window):
         self.profile_combo['values'] = self.aws_manager.get_profiles()
         self.region_combo['values'] = self.aws_manager.get_regions()
         
-    def create_instances_frame(self, parent):
-        self.outer_frame = ttk.Frame(parent)
-        self.outer_frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
+    # def create_instances_frame(self, parent):
+    #     self.outer_frame = ttk.Frame(parent)
+    #     self.outer_frame.pack(fill=BOTH, expand=True, padx=10, pady=10)
 
-        # Crea l'header
+    #     # Crea l'header
+    #     self.header_frame = ttk.Frame(self.outer_frame)
+    #     self.header_frame.pack(fill=X)
+
+    #     headers = ["Name", "ID", "Type", "OS", "State", "Actions"]
+    #     widths = [30, 18, 10, 10, 13, 60]  # Larghezze approssimative per ogni colonna
+    #     for i, header in enumerate(headers):
+    #         ttk.Label(self.header_frame, text=header, font=('Arial', 10, 'bold'), width=widths[i], anchor="w").pack(side=LEFT, padx=2, fill=X, expand=True)
+
+    #     # Crea il canvas scrollabile per le istanze
+    #     self.instances_canvas = ttk.Canvas(self.outer_frame)
+    #     self.instances_canvas.pack(side=LEFT, fill=BOTH, expand=True)
+
+    #     self.scrollbar = ttk.Scrollbar(self.outer_frame, orient=VERTICAL, command=self.instances_canvas.yview)
+    #     self.scrollbar.pack(side=RIGHT, fill=Y)
+
+    #     self.instances_canvas.configure(yscrollcommand=self.scrollbar.set)
+
+    #     self.instances_frame = ttk.Frame(self.instances_canvas)
+    #     self.instances_canvas.create_window((0, 0), window=self.instances_frame, anchor="nw", tags="instance_frame")
+        
+    #     self.instances_canvas.bind('<Configure>', self.on_canvas_configure)
+    #     self.instances_frame.bind('<Configure>', lambda e: self.instances_canvas.configure(scrollregion=self.instances_canvas.bbox("all")))    
+    def create_instances_frame(self, parent):
+        # Frame esterno con bordo
+        outer_container = ttk.Frame(parent, style="ProfileRegion.TFrame")
+        outer_container.pack(fill=BOTH, expand=True, padx=10, pady=10)
+        
+        # Aggiungi il titolo
+        title_label = ttk.Label(outer_container, text="List Instances", font=('Arial', 12, 'bold'))
+        title_label.pack(anchor=W, padx=10, pady=(10, 5))  # Allineato a sinistra
+        
+        # Frame interno con padding per mostrare il bordo
+        self.outer_frame = ttk.Frame(outer_container)
+        self.outer_frame.pack(fill=BOTH, expand=True, padx=1, pady=1)
+
+        # Il resto del codice rimane uguale
         self.header_frame = ttk.Frame(self.outer_frame)
         self.header_frame.pack(fill=X)
 
         headers = ["Name", "ID", "Type", "OS", "State", "Actions"]
-        widths = [30, 18, 10, 10, 13, 60]  # Larghezze approssimative per ogni colonna
+        widths = [30, 18, 10, 10, 13, 60]
         for i, header in enumerate(headers):
             ttk.Label(self.header_frame, text=header, font=('Arial', 10, 'bold'), width=widths[i], anchor="w").pack(side=LEFT, padx=2, fill=X, expand=True)
 
-        # Crea il canvas scrollabile per le istanze
         self.instances_canvas = ttk.Canvas(self.outer_frame)
         self.instances_canvas.pack(side=LEFT, fill=BOTH, expand=True)
 
@@ -433,7 +787,7 @@ class AWSSSMManagerApp(ttk.Window):
         self.instances_canvas.create_window((0, 0), window=self.instances_frame, anchor="nw", tags="instance_frame")
         
         self.instances_canvas.bind('<Configure>', self.on_canvas_configure)
-        self.instances_frame.bind('<Configure>', lambda e: self.instances_canvas.configure(scrollregion=self.instances_canvas.bbox("all")))    
+        self.instances_frame.bind('<Configure>', lambda e: self.instances_canvas.configure(scrollregion=self.instances_canvas.bbox("all")))
         
     def on_canvas_configure(self, event):
         # Aggiorna la larghezza del frame interno quando il canvas viene ridimensionato
@@ -447,54 +801,136 @@ class AWSSSMManagerApp(ttk.Window):
         self.loading_label = ttk.Label(parent, text="", font=('Arial', 10, 'bold'))
         self.loading_label.pack(pady=5)
 
-    def update_connection_status(self, is_connected):
-        if is_connected:
-            self.status_icon.config(text="🟢", foreground="green")
-        else:
-            self.status_icon.config(text="🔴", foreground="red")
+    # def update_connection_status(self, is_connected):
+    #     if is_connected:
+    #         self.status_icon.config(text="🟢", foreground="green")
+    #     else:
+    #         self.status_icon.config(text="🔴", foreground="red")
+
 
     def update_instances(self, instances):
+            # Pulisci il frame delle istanze
         for widget in self.instances_frame.winfo_children():
             widget.destroy()
 
+            # Se non ci sono istanze, mostra un messaggio di errore e interrompi
+        if instances is None:
+            self.connect_button.config(text="Connect", bootstyle=SUCCESS)
+            self.show_error("Errore nella connessione. Verifica le autorizzazioni o il login.")
+            return
+        
         for i, instance in enumerate(instances):
             frame = ttk.Frame(self.instances_frame, relief=RAISED, borderwidth=1, style="Instance.TFrame")
             frame.pack(fill=X, expand=True, padx=5, pady=5)
 
-            # Creiamo un sottoriquadro per le informazioni
-            info_frame = ttk.Frame(frame)
-            info_frame.pack(side=LEFT, fill=X, expand=True)
-            
-            # info_frame = ttk.Frame(frame)
-            # info_frame.pack(side=LEFT, fill=X, expand=True, padx=5, pady=5)
+            # Creiamo un container frame per mantenere l'allineamento
+            container_frame = ttk.Frame(frame)
+            container_frame.pack(fill=X, expand=True, side=LEFT, padx=2)
 
-            # Disponiamo le informazioni in due righe
-            ttk.Label(info_frame, text=f"{instance.get('name', 'N/A')}",  width=32, anchor="w").pack(side=LEFT, padx=2, fill=X, expand=True)
-            ttk.Label(info_frame, text=f"{instance.get('id', 'N/A')}",    width=20, anchor="w").pack(side=LEFT, padx=2)
-            # copy_button = ttk.Button(info_frame, text="Copia", command=lambda: self.copy_to_clipboard(instances))
-            # copy_button.pack(side=LEFT, padx=5)
-            
-            ttk.Label(info_frame, text=f"{instance.get('type', 'N/A')}",  width=11, anchor="w").pack(side=LEFT, padx=2)
-            ttk.Label(info_frame, text=f"{instance.get('os', 'N/A')}",    width=15, anchor="w").pack(side=LEFT, padx=2)
-            ttk.Label(info_frame, text=f"{instance.get('state', 'N/A')}", width=13, anchor="w").pack(side=LEFT, padx=2)
+            # Larghezze fisse per ogni colonna
+            widths = {
+                'name': 32,
+                'id': 20,
+                'type': 11,
+                'os': 15,
+                'state': 13
+            }
 
-            # Creiamo un sottoriquadro per i pulsanti
+            # Creiamo le label con larghezze fisse nel container
+            ttk.Label(container_frame, text=f" | ", anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f"{instance.get('name', 'N/A')}", width=widths['name'], anchor="w").pack(side=LEFT)
+            #ttk.Label(container_frame, text=f"{instance.get('id', 'N/A')}", width=widths['id'], anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f" | ", anchor="w").pack(side=LEFT)
+
+             # ID dell'istanza con pulsante di copia
+            instance_id = instance.get('id', 'N/A')
+            id_frame = ttk.Frame(container_frame)  # Nuovo frame per l'ID e il pulsante di copia
+            id_frame.pack(side=LEFT)
+
+            # Label dell'ID
+            #id_label = ttk.Label(id_frame, text=instance_id, width=widths['id'], anchor="w")
+            #id_label.pack(side=LEFT)
+
+            # Bottone per copiare l'ID
+            copy_button = ttk.Button(
+                id_frame, 
+                #image=self.copy_icon, 
+                text=instance_id,
+                command=lambda id=instance_id: self.copy_to_clipboard(id), 
+                style="light"
+            )
+            copy_button.pack(side=LEFT, padx=0)
+            
+            
+            ttk.Label(container_frame, text=f" | ", anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f"{instance.get('type', 'N/A')}", width=widths['type'], anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f" | ", anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f"{instance.get('os', 'N/A')}", width=widths['os'], anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f" | ", anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f"{instance.get('state', 'N/A')}", width=widths['state'], anchor="w").pack(side=LEFT)
+            ttk.Label(container_frame, text=f" | ", anchor="w").pack(side=LEFT)
+
+            # Frame per i pulsanti
             button_frame = ttk.Frame(frame)
             button_frame.pack(side=RIGHT, padx=5, pady=5)
 
-            # ttk.Button(button_frame, text="SSH", command=lambda id=instance.get('id'): self.start_ssh_session(id), style="SSH.TButton", width=8).pack(side=LEFT, padx=2)
-            # ttk.Button(button_frame, text="RDP", command=lambda id=instance.get('id'): self.start_rdp_session(id), width=8).pack(side=LEFT, padx=2)
-            # ttk.Button(button_frame, text="CUSTOM", command=lambda id=instance.get('id'): self.open_custom_port_popup(id), style="Custom.TButton", width=8).pack(side=LEFT, padx=2)
-            # ttk.Button(button_frame, text="HOST", command=lambda id=instance.get('id'): self.open_host_popup(id), style="Host.TButton", width=8).pack(side=LEFT, padx=2)
-
+            # Pulsanti
             ttk.Button(button_frame, text="SSH", command=lambda id=instance.get('id'): self.start_ssh_session(id), style="dark", width=8).pack(side=LEFT, padx=2)
             ttk.Button(button_frame, text="RDP", command=lambda id=instance.get('id'): self.start_rdp_session(id), style="primary", width=8).pack(side=LEFT, padx=2)
             ttk.Button(button_frame, text="CUSTOM", command=lambda id=instance.get('id'): self.open_custom_port_popup(id), style="Custom.TButton", width=8).pack(side=LEFT, padx=2)
             ttk.Button(button_frame, text="HOST", command=lambda id=instance.get('id'): self.open_host_popup(id), style="success", width=8).pack(side=LEFT, padx=2)
-        
+
         self.instances_canvas.update_idletasks()
         self.instances_canvas.configure(scrollregion=self.instances_canvas.bbox("all"))
+    # def update_instances(self, instances):
+    #     for widget in self.instances_frame.winfo_children():
+    #         widget.destroy()
 
+    #     for i, instance in enumerate(instances):
+    #         frame = ttk.Frame(self.instances_frame, relief=RAISED, borderwidth=1, style="Instance.TFrame")
+    #         frame.pack(fill=X, expand=True, padx=5, pady=5)
+
+    #         # Creiamo un sottoriquadro per le informazioni
+    #         info_frame = ttk.Frame(frame)
+    #         info_frame.pack(side=LEFT, fill=X, expand=True)
+            
+    #         # info_frame = ttk.Frame(frame)
+    #         # info_frame.pack(side=LEFT, fill=X, expand=True, padx=5, pady=5)
+
+    #         # Disponiamo le informazioni in due righe
+    #         ttk.Label(info_frame, text=f"{instance.get('name', 'N/A')}",  width=32, anchor="w").pack(side=LEFT, padx=2, fill=X, expand=True)
+    #         ttk.Label(info_frame, text=f"{instance.get('id', 'N/A')}",    width=20, anchor="w").pack(side=LEFT, padx=2)
+    #         # copy_button = ttk.Button(info_frame, text="Copia", command=lambda: self.copy_to_clipboard(instances))
+    #         # copy_button.pack(side=LEFT, padx=5)
+            
+    #         ttk.Label(info_frame, text=f"{instance.get('type', 'N/A')}",  width=11, anchor="w").pack(side=LEFT, padx=2)
+    #         ttk.Label(info_frame, text=f"{instance.get('os', 'N/A')}",    width=15, anchor="w").pack(side=LEFT, padx=2)
+    #         ttk.Label(info_frame, text=f"{instance.get('state', 'N/A')}", width=13, anchor="w").pack(side=LEFT, padx=2)
+
+    #         # Creiamo un sottoriquadro per i pulsanti
+    #         button_frame = ttk.Frame(frame)
+    #         button_frame.pack(side=RIGHT, padx=5, pady=5)
+
+    #         # ttk.Button(button_frame, text="SSH", command=lambda id=instance.get('id'): self.start_ssh_session(id), style="SSH.TButton", width=8).pack(side=LEFT, padx=2)
+    #         # ttk.Button(button_frame, text="RDP", command=lambda id=instance.get('id'): self.start_rdp_session(id), width=8).pack(side=LEFT, padx=2)
+    #         # ttk.Button(button_frame, text="CUSTOM", command=lambda id=instance.get('id'): self.open_custom_port_popup(id), style="Custom.TButton", width=8).pack(side=LEFT, padx=2)
+    #         # ttk.Button(button_frame, text="HOST", command=lambda id=instance.get('id'): self.open_host_popup(id), style="Host.TButton", width=8).pack(side=LEFT, padx=2)
+
+    #         ttk.Button(button_frame, text="SSH", command=lambda id=instance.get('id'): self.start_ssh_session(id), style="dark", width=8).pack(side=LEFT, padx=2)
+    #         ttk.Button(button_frame, text="RDP", command=lambda id=instance.get('id'): self.start_rdp_session(id), style="primary", width=8).pack(side=LEFT, padx=2)
+    #         ttk.Button(button_frame, text="CUSTOM", command=lambda id=instance.get('id'): self.open_custom_port_popup(id), style="Custom.TButton", width=8).pack(side=LEFT, padx=2)
+    #         ttk.Button(button_frame, text="HOST", command=lambda id=instance.get('id'): self.open_host_popup(id), style="success", width=8).pack(side=LEFT, padx=2)
+        
+    #     self.instances_canvas.update_idletasks()
+    #     self.instances_canvas.configure(scrollregion=self.instances_canvas.bbox("all"))
+
+
+    def copy_to_clipboard(self, instance_id):
+        self.clipboard_clear()
+        self.clipboard_append(instance_id)
+        self.update()  # Aggiorna la clipboard per renderla persistente
+        Messagebox.show_info(f"Copied ID: {instance_id}", "Clipboard")
+    
 # Aggiungi questo metodo per gestire il ridimensionamento della finestra
     def on_window_resize(self, event=None):
         if hasattr(self, 'instances_canvas'):
@@ -598,9 +1034,9 @@ class AWSSSMManagerApp(ttk.Window):
 
     def create_active_connections_frame(self, parent):
         frame = ttk.Frame(parent, style="ActiveConnections.TFrame")
-        frame.pack(fill=X, padx=1, pady=1, after=self.outer_frame)  # Usa self.outer_frame invece di self.instances_frame
+        frame.pack(fill=X, padx=10, pady=10)  # Usa self.outer_frame invece di self.instances_frame
 
-        ttk.Label(frame, text="Connessioni Attive", font=('Arial', 12, 'bold')).pack(anchor=W, pady=1)
+        ttk.Label(frame, text="Active Connections", font=('Arial', 12, 'bold')).pack(anchor=W, pady=1)
 
         # Create a canvas to hold the connections
         self.connections_canvas = ttk.Canvas(frame)
@@ -654,23 +1090,123 @@ class AWSSSMManagerApp(ttk.Window):
 
         for conn in self.active_connections:
             conn_frame = ttk.Frame(self.connections_frame)
-            conn_frame.pack(fill=X, pady=2, expand=True)
-
+            #conn_frame.pack(fill=X, pady=2, expand=True)
+            conn_frame.pack(fill=X, pady=4, expand=True)  # Aumentato il pady per più spazio verticale
+            
+            # Frame principale per contenuto e progress bar
+            content_frame = ttk.Frame(conn_frame)
+            #content_frame.pack(fill=X, expand=True)
+            content_frame.pack(fill=X, expand=True, padx=10)  # Aggiunto padding orizzontale
+            # Progress bar (inizialmente nascosta)
+            progress_frame = ttk.Frame(conn_frame)
+            progress = Progressbar(
+            progress_frame, 
+            bootstyle="success",
+            mode='indeterminate',
+            length=200
+            )
+            
             conn_type = conn.get('type', 'Unknown')
             port = conn.get('port', 'N/A')
-            label_text = f"Instance: {conn['instance_id']}, Type: {conn_type}, Port: {port}"
+            label_text = f"Instance: {conn['instance_id']},  Type: {conn_type},  Port: {port}"
             
             if conn_type == 'Host':
                 remote_host = conn.get('remote_host', 'N/A')
                 remote_port = conn.get('remote_port', 'N/A')
-                label_text = f"Instance: {conn['instance_id']}, Type: {conn_type}, Remote: {remote_host}:{remote_port}, Local Port: {port}"
+                label_text = f"Instance: {conn['instance_id']},  Type: {conn_type},  Remote: {remote_host}:{remote_port},  Local Port: {port}"
             
-            ttk.Label(conn_frame, text=label_text).pack(side=LEFT, fill=X, expand=True)
-            ttk.Button(conn_frame, text="Termina", command=lambda c=conn: self.terminate_connection(c), style="danger").pack(side=RIGHT)
-        
+            #ttk.Label(conn_frame, text=label_text, ).pack(side=LEFT, fill=X, expand=True)
+            ttk.Label(content_frame, text=label_text, font=('Helvetica', 11, ), width=80, padding=(10,5)).pack(side=LEFT, fill=X, expand=True, padx=20)
+            #ttk.Button(conn_frame, text="Termina", command=lambda c=conn: self.terminate_connection(c), style="danger").pack(side=RIGHT)
+
+            
+            def terminate_with_loading(connection=conn, 
+                                        content=content_frame, 
+                                        progress_f=progress_frame, 
+                                        prog=progress):
+                    # Nascondi il contenuto normale e mostra la barra di progresso
+                    content.pack_forget()
+                    progress_f.pack(fill=X, expand=True, pady=10)
+                    prog.pack(padx=20)
+                    prog.start()
+                    
+                    # Usa after per eseguire la terminazione in modo asincrono
+                    self.after(100, lambda: self._perform_termination(connection, content, progress_f))
+
+            ttk.Button(
+                content_frame, 
+                text="END", 
+                command=terminate_with_loading,
+                style="danger"
+            ).pack(side=RIGHT)
+            
+            
         self.connections_canvas.update_idletasks()
         self.connections_canvas.configure(scrollregion=self.connections_canvas.bbox("all"))
     
+    def _perform_termination(self, connection, content_frame, progress_frame):
+        """Esegue la terminazione effettiva della connessione."""
+        try:
+            process = connection['process']
+            
+            if process.poll() is None:  # Se il processo è ancora in esecuzione
+                # Ottieni il PID del processo PowerShell
+                powershell_pid = process.pid
+                
+                try:
+                    parent = psutil.Process(powershell_pid)
+                    children = parent.children(recursive=True)
+                    
+                    # Termina i processi figli
+                    for child in children:
+                        try:
+                            child.terminate()
+                            child.wait(timeout=5)
+                        except (psutil.NoSuchProcess, psutil.TimeoutExpired):
+                            child.kill() if child.is_running() else None
+                    
+                    # Termina il processo genitore
+                    parent.terminate()
+                    try:
+                        parent.wait(timeout=5)
+                    except psutil.TimeoutExpired:
+                        parent.kill()
+
+                    # Breve attesa per assicurarsi che tutto sia terminato
+                    time.sleep(2)
+
+                    # Chiudi eventuali finestre associate
+                    def close_window(hwnd, _):
+                        try:
+                            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                            if pid == powershell_pid:
+                                win32gui.PostMessage(hwnd, win32con.WM_CLOSE, 0, 0)
+                        except:
+                            pass
+                    
+                    win32gui.EnumWindows(close_window, None)
+                    
+                except psutil.NoSuchProcess:
+                    logger.warning(f"Process no longer exists (pid={powershell_pid})")
+            
+            # Rimuovi la connessione e aggiorna l'interfaccia
+            if connection in self.active_connections:
+                self.active_connections.remove(connection)
+                logger.info(f"Connection terminated for instance {connection['instance_id']}")
+                
+            # Aggiorna l'interfaccia dopo un breve delay per mostrare l'animazione
+            self.after(1000, self.update_active_connections)
+                
+        except Exception as e:
+            logger.error(f"Error terminating connection: {str(e)}")
+            # Ripristina l'interfaccia in caso di errore
+            content_frame.pack()
+            progress_frame.pack_forget()
+            self.show_error(f"Error terminating connection: {str(e)}")
+            
+            
+            
+            
     def set_profile_and_region(self):
         profile = self.profile_var.get()
         region = self.region_var.get()
@@ -893,11 +1429,40 @@ class AWSSSMManagerApp(ttk.Window):
         with open(resource_path('preferences.json'), 'w') as f: #with open('preferences.json', 'w') as f:
             json.dump(self.preferences, f)
 
+    # def on_closing(self):
+    #     if Messagebox.yesno("Quit", "Do you want to quit?"):
+    #         self.aws_thread.stop()
+    #         self.aws_thread.join()
+    #         self.destroy()
     def on_closing(self):
-        if Messagebox.yesno("Quit", "Do you want to quit?"):
-            self.aws_thread.stop()
-            self.aws_thread.join()
+        msg_box = Messagebox.yesno("Quit", "Do you want to quit?")
+        
+        if msg_box == "Yes":
+            if self.aws_thread:
+                self.aws_thread.stop()
+                self.aws_thread.join()
             self.destroy()
+        else:
+            return
+        
+        # if Messagebox.yesno("Quit", "Do you want to quit?"):
+        #     if self.aws_thread:
+        #         self.aws_thread.stop()
+        #         self.aws_thread.join()
+        #     self.destroy()
+        # else:
+        #     return  # Non fa nulla se l'utente sceglie NO
+        
+    # def on_closing(self):
+    #     should_quit = Messagebox.yesno("Quit", "Do you want to quit?")
+        
+    #     if should_quit:
+    #         if self.aws_thread:
+    #             self.aws_thread.stop()
+    #             self.aws_thread.join()
+    #         self.destroy()  # Chiude l'applicazione se l'utente conferma
+    #     else:
+    #         self.protocol("WM_DELETE_WINDOW", self.on_closing)  # Riassegna il protocollo di chiusura alla funzione stessa
             
     def change_log_level(self, level):
         self.preferences['log_level'] = level

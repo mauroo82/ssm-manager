@@ -60,7 +60,7 @@ class AWSManager:
     def list_ssm_instances(self):
         if not self.is_connected:
             logger.warning("Attempted to list instances without an active connection")
-            return {"error": "Not connected to AWS"}
+            return None  #{"error": "Not connected to AWS"}
         try:
             response = self.ssm_client.describe_instance_information()
             instance_ids = [instance['InstanceId'] for instance in response['InstanceInformationList']]
@@ -80,7 +80,7 @@ class AWSManager:
             return instances
         except Exception as e:
             logger.error(f"Error listing instances: {str(e)}")
-            return {"error": str(e)}
+            return None  # Restituisce None in caso di errore
 
     def start_ssh_session(self, instance_id):
         if not self.is_connected:
