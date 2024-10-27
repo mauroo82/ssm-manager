@@ -4,13 +4,15 @@
 
 ## Description
 
-AWS Systems Manager (SSM) Manager is a powerful application designed to simplify the management of your AWS resources. With AWS SSM Manager, you have a GUI to connect your EC2 with secure tunnel.
+AWS SSM Manager is a powerful application designed to simplify the management of your AWS EC2. 
+
+With AWS SSM Manager, you have a GUI to connect your EC2 with secure tunnel.
 
 ## Features
 
-- **Feature 1:** Description of feature 1.
-- **Feature 2:** Description of feature 2.
-- **Feature 3:** Description of feature 3.
+- Tunnel for SSH connections
+- Reverse Tunnel for RDP connections and Custom Ports
+- Port forwarding to remote host (example to connect with a private RDS databse without vpn o nat)
 
 ## Installation and Requirements
 
@@ -20,7 +22,7 @@ AWS Systems Manager (SSM) Manager is a powerful application designed to simplify
 - AWS SSM plugin installed
 
 ### Installation
-- Download Setup [Setup](https://github.com/mauroo82/ssm-manager/blob/main/installer/setup.exe).
+- Download Setup [Setup Folder](https://github.com/mauroo82/ssm-manager/blob/main/installer/).
 
 
 ## Usage
