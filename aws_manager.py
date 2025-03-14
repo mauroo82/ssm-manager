@@ -103,9 +103,12 @@ class AWSManager:
 
         try:
             # Get all instances with SSM
-            ssm_response = self.ssm_client.describe_instance_information()
-            # Create a set of instance IDs that have SSM
-            ssm_instance_ids = {instance['InstanceId'] for instance in ssm_response.get('InstanceInformationList', [])}
+            paginator = self.ssm_client.get_paginator('describe_instance_information')
+            ssm_instance_ids = set()
+            for page in paginator.paginate():
+                for instance in page.get('InstanceInformationList', []):
+                    ssm_instance_ids.add(instance['InstanceId'])
+
             logger.debug(f"Found {len(ssm_instance_ids)} instances with SSM: {ssm_instance_ids}")
             
             # Get all EC2 instances
