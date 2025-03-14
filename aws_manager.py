@@ -18,37 +18,26 @@ class AWSManager:
 
 
     def disconnect_profile_and_region(self):
-        pass  
-    
+        pass
+
+
     @staticmethod
     def get_profiles():
         """
-        Static method to retrieve AWS profiles from credentials file
+        Static method to retrieve AWS profiles
         Returns: List of profile names or empty list if no profiles found
         """
         try:
-            # Get credentials file path
-            credentials_path = os.path.expanduser('~/.aws/credentials')
-            
-            # Check if credentials file exists
-            if not os.path.exists(credentials_path):
-                logger.warning("AWS credentials file not found")
-                return []
-            
-            # Parse credentials file
-            config = configparser.ConfigParser()
-            config.read(credentials_path)
-            
-            # Get profile names (sections in credentials file)
-            profiles = config.sections()
-            
+            session = boto3.Session()
+            profiles = session.available_profiles
             logger.info(f"Successfully loaded {len(profiles)} AWS profiles")
-            return profiles
-            
-        except Exception as e:
-            logger.error(f"Error getting AWS profiles: {str(e)}")
+            return profiles if profiles else []
+        except botocore.exceptions.BotoCoreError as e:
+            logger.warning(f"Error retrieving AWS profiles: {e}")
             return []
-
+        except Exception as e:
+            logger.error(f"Error retrieving AWS profiles: {e}")
+            return []
 
 
     def get_regions(self):
@@ -61,11 +50,11 @@ class AWSManager:
             self.ssm_client = session.client('ssm')
             self.ec2_client = session.client('ec2')
             self.sts_client = session.client('sts')  # Initialize STS client
-            
+
             # Get AWS account ID
             account_info = self.sts_client.get_caller_identity()
             self.account_id = account_info['Account']
-            
+
             self.profile = profile
             self.region = region
             self.is_connected = True
@@ -94,7 +83,6 @@ class AWSManager:
         return self.is_connected
 
 
-
     def list_ssm_instances(self):
         """List all EC2 instances with their SSM status"""
         if not self.is_connected:
@@ -110,18 +98,18 @@ class AWSManager:
                     ssm_instance_ids.add(instance['InstanceId'])
 
             logger.debug(f"Found {len(ssm_instance_ids)} instances with SSM: {ssm_instance_ids}")
-            
+
             # Get all EC2 instances
             instances = []
             paginator = self.ec2_client.get_paginator('describe_instances')
-            
+
             for page in paginator.paginate():
                 for reservation in page['Reservations']:
                     for instance in reservation['Instances']:
                         instance_id = instance['InstanceId']
                         # Explicitly check if the instance ID is in the SSM set
                         has_ssm = instance_id in ssm_instance_ids
-                        
+
                         instance_data = {
                             'id': instance_id,
                             'name': next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), 'N/A'),
@@ -132,47 +120,48 @@ class AWSManager:
                         }
                         logger.debug(f"Instance {instance_id} has_ssm: {has_ssm}")
                         instances.append(instance_data)
-            
+
             # Sort instances: SSM instances first, then by name
             instances.sort(key=lambda x: (not x['has_ssm'], x.get('name', '').lower()))
-            
+
             logger.info(f"Successfully listed {len(instances)} instances (with SSM: {len(ssm_instance_ids)})")
             return instances
-            
+
         except Exception as e:
             logger.error(f"Error listing instances: {str(e)}")
             if 'ExpiredTokenException' in str(e):
                 self.is_connected = False  # Set connection status to false
                 return {'error': 'Authentication token expired. Please reconnect.'}
             return None
-        
+
+
     def get_instance_details(self, instance_id):
         """
         Get detailed information about a specific EC2 instance
-        
+
         Args:
             instance_id (str): The ID of the EC2 instance
-            
+
         Returns:
             dict: Detailed information about the instance or None if an error occurs
         """
         try:
             response = self.ec2_client.describe_instances(InstanceIds=[instance_id])
-            
+
             if not response['Reservations']:
                 logger.warning(f"No instance found with ID: {instance_id}")
                 return None
-                
+
             instance = response['Reservations'][0]['Instances'][0]
-            
+
             # Get instance IAM role if it exists
             iam_role = ''
             if instance.get('IamInstanceProfile'):
                 iam_role = instance['IamInstanceProfile'].get('Arn', '').split('/')[-1]
-            
+
             # Get security group names
             security_groups = [sg['GroupName'] for sg in instance.get('SecurityGroups', [])]
-            
+
             instance_details = {
                 'id': instance['InstanceId'],
                 'name': next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), 'N/A'),
@@ -186,15 +175,15 @@ class AWSManager:
                 'key_name': instance.get('KeyName', 'N/A'),
                 'security_groups': ', '.join(security_groups) if security_groups else 'N/A'
             }
-            
+
             logger.debug(f"Retrieved details for instance {instance_id}")
             return instance_details
-            
+
         except Exception as e:
             logger.error(f"Error getting instance details: {str(e)}")
             return None
-        
-        
+
+
     def start_ssh_session(self, instance_id):
         if not self.is_connected:
             logger.warning("Attempted to start SSH session without an active connection")
