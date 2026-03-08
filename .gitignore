@@ -166,5 +166,5 @@ cython_debug/
 Claude.md
 *.zip
 installer/
-
+.code-workspace
 
