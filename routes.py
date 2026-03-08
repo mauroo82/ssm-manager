@@ -35,6 +35,40 @@ def get_profiles():
         logging.error(f"Failed to load AWS profiles: {str(e)}", exc_info=True)
         return jsonify({'error': 'Failed to load profiles'}), 500
 
+
+@app.route('/api/refresh-profiles', methods=['POST'])
+def refresh_profiles():
+    """Refresh AWS profiles and maintain current connection if possible"""
+    try:
+        # Store current connection info
+        current_profile = aws_manager.profile
+        current_region = aws_manager.region
+        
+        # Get fresh list of profiles
+        profiles = aws_manager.get_profiles()
+        
+        # Check if current profile is still valid
+        is_current_valid = current_profile in profiles if current_profile else False
+        
+        response_data = {
+            'status': 'success',
+            'profiles': profiles,
+            'currentProfile': current_profile if is_current_valid else None,
+            'currentRegion': current_region if is_current_valid else None,
+            'accountId': aws_manager.account_id if is_current_valid else None
+        }
+        
+        logging.info(f"Profiles refreshed successfully. Found {len(profiles)} profiles")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logging.error(f"Failed to refresh profiles: {str(e)}")
+        return jsonify({
+            'status': 'error',
+            'message': str(e)
+        }), 500
+
+
 @app.route('/api/regions')
 def get_regions():
     try:

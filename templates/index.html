@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,9 +11,10 @@
         .instance-card {
             transition: all 0.3s ease;
         }
+
         .instance-card:hover {
             transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
         }
     </style>
 
@@ -20,14 +22,15 @@
 
 
 </head>
+
 <body class="bg-light">
     <div class="container-fluid py-4">
         <!-- Header -->
         <div class="row mb-4">
-          
-                
-           
-                <div class="col">
+
+
+
+            <div class="col">
                 <div class="card shadow-sm">
                     <div class="card-body">
                         <div class="row g-3 align-items-center">
@@ -41,24 +44,33 @@
                                     <option value="">Select Profile</option>
                                 </select>
                             </div>
-                            
+                            <div class="col-auto">
+                                <button id="refreshProfilesBtn" class="btn btn-outline-secondary"
+                                    title="Refresh Profiles">
+                                    <i class="bi bi-arrow-clockwise"></i>
+                                </button>
+                            </div>
+
+
                             <div class="col-auto">
                                 <select id="regionSelect" class="form-select">
                                     <option value="">Select Region</option>
                                 </select>
                             </div>
-                            
+
                             <div class="col-auto">
                                 <button id="connectBtn" class="btn btn-success">
                                     <i class="bi bi-plug fs-5"></i> Connect
                                 </button>
                             </div>
-                            
+
                             <div class="col-auto">
-                                <button id="refreshBtn" class="btn btn-outline-secondary d-flex align-items-center justify-content-between">
+                                <button id="refreshBtn"
+                                    class="btn btn-outline-secondary d-flex align-items-center justify-content-between">
                                     <!-- Refresh sx -->
-                                    <i class="bi bi-arrow-clockwise fs-5 me-2" data-bs-toggle="tooltip" title="Refresh"></i>
-                                    
+                                    <i class="bi bi-arrow-clockwise fs-5 me-2" data-bs-toggle="tooltip"
+                                        title="Refresh"></i>
+
                                     <!-- Switch auto-refresh dx -->
                                     <div class="form-check form-switch m-1">
                                         <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
@@ -83,12 +95,14 @@
                             -->
                             <div class="col-auto ms-auto">
                                 <button class="btn btn-outline-secondary" id="preferencesBtn">
-                                    <i class="bi bi-gear-fill fs-5" data-bs-toggle="tooltip" title="Setting"></i> Settings
+                                    <i class="bi bi-gear-fill fs-5" data-bs-toggle="tooltip" title="Setting"></i>
+                                    Settings
                                 </button>
                             </div>
                             <div class="col-auto">
                                 <button class="btn btn-outline-secondary" id="aboutBtn">
-                                    <i class="bi bi-info-circle-fill fs-5" data-bs-toggle="tooltip" title="About"></i> About
+                                    <i class="bi bi-info-circle-fill fs-5" data-bs-toggle="tooltip" title="About"></i>
+                                    About
                                 </button>
                             </div>
                         </div>
@@ -106,7 +120,7 @@
                         <div class="d-flex align-items-center gap-2">
                             <h5 class="m-0">Instances </h5>
                             <h5 class="m-0" id="accountIdContainer" style="display: none;">
-                            - AWS ID: <span id="awsAccountId"></span>
+                                - AWS ID: <span id="awsAccountId"></span>
                             </h5>
                         </div>
                         <span class="badge bg-primary" id="instanceCount">0 instances</span>
@@ -118,7 +132,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <!-- Active Connections Section - Now 4 columns -->
             <div class="col-md-4">
                 <div class="card shadow-sm">
@@ -134,10 +148,11 @@
                 </div>
             </div>
         </div>
-    
+
     </div>
     <!-- Instance Details Modal -->
-    <div class="modal fade" id="instanceDetailsModal" tabindex="-1" aria-labelledby="instanceDetailsModalLabel" aria-hidden="true">
+    <div class="modal fade" id="instanceDetailsModal" tabindex="-1" aria-labelledby="instanceDetailsModalLabel"
+        aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -154,113 +169,116 @@
             </div>
         </div>
     </div>
-   
+
 
     <!-- customPortModal -->
-<div class="modal fade" id="customPortModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Custom Port Forwarding</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="mb-3">
-                    <!-- Modalità di selezione -->
-                    <label class="form-label">Select Mode</label>
-                    <select id="modeSelect" class="form-select">
-                        <option value="local">Local Remote Port</option>
-                        <option value="other">Other Host Remote Port</option>
-                    </select>
+    <div class="modal fade" id="customPortModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Custom Port Forwarding</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
-
-                <!-- Campo porta remota, visibile solo se modalità è "Local Remote Port" -->
-                <div class="mb-3" id="remotePortContainer">
-                    <label for="remotePort" class="form-label">Remote Port</label>
-                    <input type="number" class="form-control" id="remotePort" min="1" max="65535" value="80">
-                </div>
-
-                <!-- Campo host e porta, visibile solo se modalità è "Other Host Remote Port" -->
-                <div id="otherHostContainer" style="display: none;">
+                <div class="modal-body">
                     <div class="mb-3">
-                        <label for="remoteHost" class="form-label">Remote Host</label>
-                        <input type="text" class="form-control" id="remoteHost" placeholder="Enter remote host">
+                        <!-- Modalità di selezione -->
+                        <label class="form-label">Select Mode</label>
+                        <select id="modeSelect" class="form-select">
+                            <option value="local">Local Remote Port</option>
+                            <option value="other">Other Host Remote Port</option>
+                        </select>
                     </div>
-                    <div class="mb-3">
-                        <label for="otherRemotePort" class="form-label">Remote Port</label>
-                        <input type="number" class="form-control" id="otherRemotePort" min="1" max="65535" value="80">
+
+                    <!-- Campo porta remota, visibile solo se modalità è "Local Remote Port" -->
+                    <div class="mb-3" id="remotePortContainer">
+                        <label for="remotePort" class="form-label">Remote Port</label>
+                        <input type="number" class="form-control" id="remotePort" min="1" max="65535" value="80">
+                    </div>
+
+                    <!-- Campo host e porta, visibile solo se modalità è "Other Host Remote Port" -->
+                    <div id="otherHostContainer" style="display: none;">
+                        <div class="mb-3">
+                            <label for="remoteHost" class="form-label">Remote Host</label>
+                            <input type="text" class="form-control" id="remoteHost" placeholder="Enter remote host">
+                        </div>
+                        <div class="mb-3">
+                            <label for="otherRemotePort" class="form-label">Remote Port</label>
+                            <input type="number" class="form-control" id="otherRemotePort" min="1" max="65535"
+                                value="80">
+                        </div>
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" class="btn btn-primary" id="startPortForwardingBtn">Start Forwarding</button>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="startPortForwardingBtn">Start Forwarding</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
 
-<!-- Detail Instance -->
-<div class="modal fade" id="instanceDetailsModal" tabindex="-1" aria-labelledby="instanceDetailsModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="instanceDetailsModalLabel">Instance Details</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div id="instanceDetailsContent">
-                    <!-- Content will be dynamically inserted here -->
+    <!-- Detail Instance -->
+    <div class="modal fade" id="instanceDetailsModal" tabindex="-1" aria-labelledby="instanceDetailsModalLabel"
+        aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="instanceDetailsModalLabel">Instance Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- About Modal -->
-<div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="aboutModalLabel">About SSM Manager</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body">
-                <div class="text-left">
-                    <p>
-                        Hi there! 👋 I'm Mauro Arduini, and I built this app in my spare time with some amazing help from Claude.ai. 
-                        <br>
-                        Want to help make it even better? I'd love to hear from you - catch me on GitHub or LinkedIn!
-                    </p>
-                    <div class="mt-4 d-flex justify-content-center gap-4">
-                        <a href="https://github.com/mauroo82/ssm-manager" 
-                           class="link-dark text-decoration-none text-center" 
-                           target="_blank">
-                            <i class="bi bi-github fs-4"></i><br>
-                            GitHub Repository
-                        </a>
-                        <a href="https://www.linkedin.com/in/mauro-arduini-0aa86621/" 
-                           class="link-dark text-decoration-none text-center" 
-                           target="_blank">
-                            <i class="bi bi-linkedin fs-4"></i><br>
-                            LinkedIn Profile
-                        </a>
+                <div class="modal-body">
+                    <div id="instanceDetailsContent">
+                        <!-- Content will be dynamically inserted here -->
                     </div>
                 </div>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Preferences Modal -->
-    <div class="modal fade" id="preferencesModal" tabindex="-1" aria-labelledby="preferencesModalLabel" aria-hidden="true">
+    <!-- About Modal -->
+    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="aboutModalLabel">About SSM Manager</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-left">
+                        <p>
+                            Hi there! 👋 I'm Mauro Arduini, and I built this app in my spare time with some amazing help
+                            from Claude.ai.
+                            <br>
+                            Want to help make it even better? I'd love to hear from you - catch me on GitHub or
+                            LinkedIn!
+                        </p>
+                        <div class="mt-4 d-flex justify-content-center gap-4">
+                            <a href="https://github.com/mauroo82/ssm-manager"
+                                class="link-dark text-decoration-none text-center" target="_blank">
+                                <i class="bi bi-github fs-4"></i><br>
+                                GitHub Repository
+                            </a>
+                            <a href="https://www.linkedin.com/in/mauro-arduini-0aa86621/"
+                                class="link-dark text-decoration-none text-center" target="_blank">
+                                <i class="bi bi-linkedin fs-4"></i><br>
+                                LinkedIn Profile
+                            </a>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Preferences Modal -->
+    <div class="modal fade" id="preferencesModal" tabindex="-1" aria-labelledby="preferencesModalLabel"
+        aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
@@ -307,8 +325,10 @@
         <!-- Toasts will be added here -->
     </div>
 
- 
-    <div id="loadingOverlay" class="d-none position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex justify-content-center align-items-center" style="z-index: 1060;">
+
+    <div id="loadingOverlay"
+        class="d-none position-fixed top-0 start-0 w-100 h-100 bg-white bg-opacity-75 d-flex justify-content-center align-items-center"
+        style="z-index: 1060;">
         <div class="spinner-border text-primary" role="status">
             <span class="visually-hidden">Loading...</span>
         </div>
@@ -323,7 +343,7 @@
         const remotePortContainer = document.getElementById('remotePortContainer');
         const otherHostContainer = document.getElementById('otherHostContainer');
         const startPortForwardingBtn = document.getElementById('startPortForwardingBtn');
-    
+
         // Ascolta il cambiamento della selezione modalità
         modeSelect.addEventListener('change', function () {
             if (this.value === 'local') {
@@ -336,7 +356,42 @@
                 startPortForwardingBtn.id = 'startPortForwardingBtnOther';
             }
         });
+
+        document.getElementById('refreshProfilesBtn').addEventListener('click', async function () {
+            try {
+                const response = await fetch('/api/refresh-profiles', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // Update the profile select dropdown
+                    const profileSelect = document.getElementById('profileSelect');
+                    profileSelect.innerHTML = '<option value="">Select Profile</option>';
+
+                    data.profiles.forEach(profile => {
+                        const option = document.createElement('option');
+                        option.value = profile;
+                        option.textContent = profile;
+                        if (data.currentProfile === profile) {
+                            option.selected = true;
+                        }
+                        profileSelect.appendChild(option);
+                    });
+
+                    // Show success message
+                    showToast('Profiles refreshed successfully', 'success');
+                } else {
+                    showToast('Failed to refresh profiles: ' + data.message, 'error');
+                }
+            } catch (error) {
+                showToast('Error refreshing profiles: ' + error, 'error');
+            }
+        });
+
     </script>
 
 </body>
+
 </html>
