@@ -75,6 +75,7 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 - Refresh AWS profiles without restarting the app
 - Support for AWS SSO, role_arn and Leapp profiles (reads both `~/.aws/credentials` and `~/.aws/config`)
 - Paginated EC2/SSM instance listing (supports environments with more than 50 instances)
+- Dark mode toggle in Settings (persisted across sessions)
 
 ## Requirements
 
