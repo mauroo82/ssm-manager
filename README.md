@@ -12,6 +12,7 @@ A desktop application for managing SSM session on AWS cloud with a user-friendly
     - [Additional Features](#additional-features)
   - [Requirements](#Requirements)
   - [Installation](#installation)
+  - [Windows Security Warning](#windows-security-warning)
   - [Usage](#usage)
   - [Development](#development)
     - [Requirements](#requirements)
@@ -71,6 +72,9 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 ### Additional Features
 - Logging system with configurable levels
 - Custom TPC port on local forwarding
+- Refresh AWS profiles without restarting the app
+- Support for AWS SSO, role_arn and Leapp profiles (reads both `~/.aws/credentials` and `~/.aws/config`)
+- Paginated EC2/SSM instance listing (supports environments with more than 50 instances)
 
 ## Requirements
 
@@ -81,9 +85,10 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 
 ## Installation
 
-1. Download the latest release from the releases page [**HERE**](https://github.com/mauroo82/ssm-manager/releases/tag/1.1).
-2. Run the installer `setup.exe`.
-3. Ensure that AWS CLI and SSM Plugin are installed.
+1. Download the latest release from the releases page [**HERE**](https://github.com/mauroo82/ssm-manager/releases/latest).
+2. Run the installer `SSM-Manager-vX.Y-setup.exe`.
+3. If Windows SmartScreen shows a security warning, see the [Windows Security Warning](#windows-security-warning) section below.
+4. Ensure that AWS CLI and SSM Plugin are installed.
    ```bash
    aws --version
    aws ssm start-session --version
@@ -95,6 +100,38 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 7. You must have the SSM agent installed on your EC2 to show all features on SSM Manager
 8. Verify proper IAM permissions for SSM sessions
 
+
+## Windows Security Warning
+
+> 🇬🇧 **English**
+>
+> When running the installer for the first time, Windows SmartScreen may display a warning:
+> **"Windows protected your PC"**.
+> This happens because the application is not yet signed with a commercial code-signing certificate.
+> The application is fully open source — you can review the complete source code in this repository.
+>
+> **To proceed:**
+> 1. Click **"More info"** in the warning dialog.
+> 2. Click **"Run anyway"**.
+>
+> The installer will then proceed normally.
+
+---
+
+> 🇮🇹 **Italiano**
+>
+> Al primo avvio dell'installer, Windows SmartScreen potrebbe mostrare un avviso:
+> **"Il PC è stato protetto da Windows"**.
+> Questo accade perché l'applicazione non è ancora firmata con un certificato di firma del codice commerciale.
+> L'applicazione è completamente open source — puoi verificare l'intero codice sorgente in questo repository.
+>
+> **Per procedere:**
+> 1. Clicca su **"Ulteriori informazioni"** nella finestra di avviso.
+> 2. Clicca su **"Esegui comunque"**.
+>
+> L'installer procederà normalmente.
+
+---
 
 ## Usage
 
@@ -124,10 +161,24 @@ pip install -r requirements.txt
 ```
 
 ### Building from Source
-```bash
-pyinstaller --onedir --noconsole --add-data "static/css;static/css" --add-data "static/js;static/js" --add-data "templates;templates" --add-data "preferences.json;." --add-data "image;image" --add-data "splash.jpg;." --add-data "icon.ico;." --icon=icon.ico --name="SSM Manager" --clean app.py
 
+Requirements: Python 3.12+, [Inno Setup 6](https://jrsoftware.org/isdl.php) installed.
+
+```powershell
+# Activate the virtual environment
+.venv\Scripts\activate
+
+# Run the build script (cleans previous output, builds exe + installer)
+.\build.ps1
 ```
+
+The script will:
+1. Clean `build/`, `dist/` and `installer/` folders
+2. Run PyInstaller to produce `dist\SSM Manager\`
+3. Run Inno Setup to produce `installer\SSM-Manager-vX.Y-setup.exe`
+
+> **Note:** The build requires `--collect-all pythonnet` and `--collect-all clr_loader` flags.
+> Without these, pywebview crashes at startup on Windows. These flags are already included in `build.ps1`.
 
 ## Contributing
 
