@@ -973,21 +973,30 @@ const app = {
     };
     // Update the showPreferences method in app.js
 
+    /**
+     * Applies or removes dark mode by toggling the data-bs-theme attribute on <html>.
+     * @param {boolean} enabled - Whether dark mode should be active.
+     */
+    app.applyDarkMode = function(enabled) {
+        document.documentElement.setAttribute('data-bs-theme', enabled ? 'dark' : 'light');
+    };
+
     app.showPreferences = async function() {
         console.log('Showing preferences dialog');
-        
+
         try {
             // Fetch latest preferences from server
             const response = await fetch('/api/preferences');
             if (!response.ok) throw new Error('Failed to load preferences');
-            
+
             const prefs = await response.json();
-            
+
             // Update the form fields with current values
             document.getElementById('startPort').value = prefs.port_range.start;
             document.getElementById('endPort').value = prefs.port_range.end;
             document.getElementById('logLevel').value = prefs.logging.level;
-            
+            document.getElementById('darkModeSwitch').checked = prefs.dark_mode === true;
+
             // Show the modal
             if (this.modals.preferences) {
                 this.modals.preferences.show();
@@ -1007,18 +1016,19 @@ const app = {
             const startPort = parseInt(document.getElementById('startPort').value);
             const endPort = parseInt(document.getElementById('endPort').value);
             const logLevel = document.getElementById('logLevel').value;
-            
+            const darkMode = document.getElementById('darkModeSwitch').checked;
+
             // Validate values
             if (startPort >= endPort) {
                 this.showError('Start port must be less than end port');
                 return;
             }
-            
+
             if (startPort < 1024 || endPort > 65535) {
                 this.showError('Ports must be between 1024 and 65535');
                 return;
             }
-            
+
             // Create new preferences object matching backend structure
             const newPreferences = {
                 port_range: {
@@ -1028,26 +1038,28 @@ const app = {
                 logging: {
                     level: logLevel,
                     format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
-                }
+                },
+                dark_mode: darkMode
             };
-            
+
             const response = await fetch('/api/preferences', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newPreferences)
             });
-            
+
             if (!response.ok) throw new Error('Failed to save preferences');
-            
-            // Update local preferences
+
+            // Update local preferences and apply dark mode immediately
             this.preferences = newPreferences;
-            
+            this.applyDarkMode(darkMode);
+
             // Hide modal and show success message
             if (this.modals.preferences) {
                 this.modals.preferences.hide();
             }
             this.showSuccess('Preferences saved successfully');
-            
+
         } catch (error) {
             console.error('Error saving preferences:', error);
             this.showError('Failed to save preferences');
@@ -1060,10 +1072,13 @@ const app = {
         try {
             const response = await fetch('/api/preferences');
             if (!response.ok) throw new Error('Failed to load preferences');
-            
+
             this.preferences = await response.json();
             console.log('Loaded preferences:', this.preferences);
-            
+
+            // Apply dark mode on startup based on saved preference
+            this.applyDarkMode(this.preferences.dark_mode === true);
+
         } catch (error) {
             console.error('Error loading initial preferences:', error);
             // Use default values if loading fails
@@ -1075,7 +1090,8 @@ const app = {
                 logging: {
                     level: 'INFO',
                     format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
-                }
+                },
+                dark_mode: false
             };
         }
     };

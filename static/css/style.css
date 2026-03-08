@@ -139,3 +139,60 @@
     user-select: text;         /* Standard */
 }
 
+/* Dark mode overrides for custom components not covered by Bootstrap's data-bs-theme */
+
+/* Override Bootstrap utility classes that force light colors */
+[data-bs-theme="dark"] body.bg-light,
+[data-bs-theme="dark"] .bg-light {
+    background-color: var(--bs-body-bg) !important;
+}
+
+[data-bs-theme="dark"] .bg-white {
+    background-color: var(--bs-secondary-bg) !important;
+}
+
+[data-bs-theme="dark"] .card {
+    background-color: var(--bs-body-bg);
+    border-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .card-header {
+    background-color: var(--bs-secondary-bg) !important;
+    border-bottom-color: var(--bs-border-color);
+}
+
+[data-bs-theme="dark"] .connection-item {
+    background: #2c3034;
+    border-color: #495057;
+    color: #dee2e6;
+}
+
+[data-bs-theme="dark"] .connection-item:hover {
+    background: #343a40;
+}
+
+[data-bs-theme="dark"] .modal-header {
+    background-color: #2c3034;
+    border-bottom-color: #495057;
+}
+
+[data-bs-theme="dark"] .modal-footer {
+    background-color: #2c3034;
+    border-top-color: #495057;
+}
+
+[data-bs-theme="dark"] #loadingOverlay {
+    background: rgba(33, 37, 41, 0.85);
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar-track {
+    background: #343a40;
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar-thumb {
+    background: #6c757d;
+}
+
+[data-bs-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
