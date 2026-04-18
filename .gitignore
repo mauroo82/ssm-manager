@@ -164,6 +164,8 @@ cython_debug/
 
 .claude/
 Claude.md
+CLAUDE.md
+CLAUDE_MEMORY.md
 *.zip
 installer/
 .code-workspace
