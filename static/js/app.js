@@ -1304,8 +1304,25 @@ const app = {
         }
     },
 
+    /**
+     * Shows the About modal and fetches the current app version from the backend.
+     * Version is loaded on every open to always reflect the running build.
+     */
     app.showAbout = function() {
         if (this.modals.about) {
+            // Fetch version from backend and update the version label before showing
+            fetch('/api/version')
+                .then(response => response.json())
+                .then(data => {
+                    const el = document.getElementById('aboutVersion');
+                    if (el) {
+                        el.textContent = `Version ${data.version}`;
+                    }
+                })
+                .catch(() => {
+                    const el = document.getElementById('aboutVersion');
+                    if (el) el.textContent = 'Version unknown';
+                });
             this.modals.about.show();
         } else {
             console.error('About modal not initialized');

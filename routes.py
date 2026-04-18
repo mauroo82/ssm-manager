@@ -1,5 +1,6 @@
 from flask import jsonify, request, render_template
 from app import app, aws_manager, active_connections
+from version import __version__
 import subprocess
 import random
 import socket
@@ -19,6 +20,16 @@ preferences_handler = PreferencesHandler()
 #logger = logging.getLogger(__name__)
 
 active_connections = []
+
+@app.route('/api/version')
+def get_version():
+    """Return the application version from version.py.
+
+    Returns:
+        JSON with key 'version' (str), e.g. {"version": "1.31"}.
+    """
+    return jsonify({'version': __version__})
+
 
 @app.route('/api/profiles')
 def get_profiles():
