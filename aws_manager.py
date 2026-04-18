@@ -162,6 +162,21 @@ class AWSManager:
             # Get security group names
             security_groups = [sg['GroupName'] for sg in instance.get('SecurityGroups', [])]
 
+            # LaunchTime = last time the instance was started (updated on every stop/start)
+            launch_time = instance.get('LaunchTime')
+            last_started = launch_time.strftime('%Y-%m-%d %H:%M:%S UTC') if launch_time else 'N/A'
+
+            # Created at = AttachTime of the root EBS volume, which is set at instance creation
+            # and never changes even after stop/start cycles
+            root_device = instance.get('RootDeviceName', '')
+            created_at = 'N/A'
+            for bd in instance.get('BlockDeviceMappings', []):
+                if bd.get('DeviceName') == root_device:
+                    attach_time = bd.get('Ebs', {}).get('AttachTime')
+                    if attach_time:
+                        created_at = attach_time.strftime('%Y-%m-%d %H:%M:%S UTC')
+                    break
+
             instance_details = {
                 'id': instance['InstanceId'],
                 'name': next((tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'Name'), 'N/A'),
@@ -173,7 +188,9 @@ class AWSManager:
                 'iam_role': iam_role,
                 'ami_id': instance.get('ImageId', 'N/A'),
                 'key_name': instance.get('KeyName', 'N/A'),
-                'security_groups': ', '.join(security_groups) if security_groups else 'N/A'
+                'security_groups': ', '.join(security_groups) if security_groups else 'N/A',
+                'last_started': last_started,
+                'created_at': created_at,
             }
 
             logger.debug(f"Retrieved details for instance {instance_id}")

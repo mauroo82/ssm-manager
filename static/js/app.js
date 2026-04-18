@@ -186,56 +186,61 @@ const app = {
         this.elements.autoRefreshSwitch.onchange = (e) => this.toggleAutoRefresh(e);
     },
 
-    // Load profiles and regions
-
+    // Load profiles, regions and restore last used selections from preferences.json
     async loadProfilesAndRegions() {
         console.log('[Profile Loading] Starting to load profiles and regions...');
         try {
-            // First attempt to load profiles
-            const profilesRes = await fetch('/api/profiles');
-            console.log('[Profile Loading] Profile response:', profilesRes);
-            
-            if (!profilesRes.ok) {
-                throw new Error(`Failed to load profiles: ${profilesRes.status}`);
-            }
+            // Fetch profiles, regions and saved preferences in parallel
+            const [profilesRes, regionsRes, prefsRes] = await Promise.all([
+                fetch('/api/profiles'),
+                fetch('/api/regions'),
+                fetch('/api/preferences')
+            ]);
+
+            if (!profilesRes.ok) throw new Error(`Failed to load profiles: ${profilesRes.status}`);
+            if (!regionsRes.ok) throw new Error(`Failed to load regions: ${regionsRes.status}`);
+
             const profiles = await profilesRes.json();
-            console.log('[Profile Loading] Loaded profiles:', profiles);
-
-            // Then load regions
-            const regionsRes = await fetch('/api/regions');
-            console.log('[Profile Loading] Region response:', regionsRes);
-            
-            if (!regionsRes.ok) {
-                throw new Error(`Failed to load regions: ${regionsRes.status}`);
-            }
             const regions = await regionsRes.json();
-            console.log('[Profile Loading] Loaded regions:', regions);
+            const prefs = prefsRes.ok ? await prefsRes.json() : {};
 
-            // Update dropdowns only if we have valid data
             if (Array.isArray(profiles)) {
                 this.updateSelect(this.elements.profileSelect, profiles);
-            } else {
-                console.error('[Profile Loading] Invalid profiles data:', profiles);
+                // Restore last profile only if it still exists in the list
+                const saved = prefs.last_profile || '';
+                if (saved && profiles.includes(saved)) {
+                    this.elements.profileSelect.value = saved;
+                }
             }
-            
+
             if (Array.isArray(regions)) {
                 this.updateSelect(this.elements.regionSelect, regions);
-            } else {
-                console.error('[Profile Loading] Invalid regions data:', regions);
+                // Restore last region only if it still exists in the list
+                const saved = prefs.last_region || '';
+                if (saved && regions.includes(saved)) {
+                    this.elements.regionSelect.value = saved;
+                }
             }
         } catch (error) {
             console.error('[Profile Loading] Error loading profiles and regions:', error);
-            // Show error to user
             this.showError('Failed to load profiles and regions: ' + error.message);
         }
     },
 
-    // Update select element with options
+    /**
+     * Populates a select element with options, then restores the last saved value
+     * from localStorage if it still exists in the new list.
+     * Falls back to the placeholder option if the saved value is no longer valid.
+     * @param {HTMLSelectElement} select - The select element to populate.
+     * @param {string[]} options - The list of option values.
+     */
     updateSelect(select, options) {
         if (!select || !options) return;
         console.log(`Updating select ${select.id} with options:`, options);
-        
-        select.innerHTML = `<option value="">Select ${select.id.replace('Select', '')}</option>`;
+
+        // Build placeholder: "Select Profile" / "Select Region"
+        const label = select.id.replace('Select', '');
+        select.innerHTML = `<option value="">Select ${label}</option>`;
         options.forEach(option => {
             const opt = document.createElement('option');
             opt.value = option;
@@ -282,10 +287,18 @@ const app = {
 
                 this.elements.connectBtn.innerHTML = '<i class="bi bi-plug fs-5"></i> Disconnect';
                 this.elements.connectBtn.classList.replace('btn-success', 'btn-danger');
-            
-                // Save last used profile/region
-                localStorage.setItem('lastProfile', profile);
-                localStorage.setItem('lastRegion', region);
+
+                // Lock dropdowns — profile/region cannot change while connected
+                this.elements.profileSelect.disabled = true;
+                this.elements.regionSelect.disabled = true;
+                document.getElementById('refreshProfilesBtn').disabled = true;
+
+                // Persist last used profile/region to preferences.json for restore on next app open
+                fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ last_profile: profile, last_region: region })
+                }).catch(err => console.error('Failed to save profile/region to preferences:', err));
             
                 await this.loadInstances();
                 this.showSuccess('Connected successfully');
@@ -329,6 +342,12 @@ const app = {
         this.updateAwsAccountDisplay();
         this.elements.connectBtn.innerHTML = '<i class="bi bi-plug"></i> Connect';
         this.elements.connectBtn.classList.replace('btn-danger', 'btn-success');
+
+        // Unlock dropdowns on disconnect
+        this.elements.profileSelect.disabled = false;
+        this.elements.regionSelect.disabled = false;
+        document.getElementById('refreshProfilesBtn').disabled = false;
+
         this.elements.instancesList.innerHTML = '';
         this.elements.connectionsList.innerHTML = '';
         this.updateCounters();
@@ -478,8 +497,25 @@ const app = {
         };
     },
 
+    /**
+     * Updates all counters in the UI: total, Linux, Windows, SSM-enabled instances
+     * and active connections. Reads from this.instances and this.connections arrays.
+     */
     updateCounters() {
-        this.elements.instanceCount.textContent = `${this.instances.length} instances`;
+        const total = this.instances.length;
+        const linux = this.instances.filter(i =>
+            i.os && (i.os.toLowerCase().includes('linux') || i.os.toLowerCase().includes('unix'))
+        ).length;
+        const windows = this.instances.filter(i =>
+            i.os && i.os.toLowerCase().includes('windows')
+        ).length;
+        const ssm = this.instances.filter(i => i.has_ssm).length;
+
+        document.getElementById('countTotal').textContent = total;
+        document.getElementById('countLinux').textContent = linux;
+        document.getElementById('countWindows').textContent = windows;
+        document.getElementById('countSsm').textContent = ssm;
+
         this.elements.connectionCount.textContent = `${this.connections.length} active`;
     },
 
@@ -591,6 +627,8 @@ const app = {
                             ${this.createDetailRow('Instance ID', details.id)}
                             ${this.createDetailRow('Name', details.name)}
                             ${this.createDetailRow('Platform', details.platform)}
+                            ${this.createDetailRow('Last Started', details.last_started)}
+                            ${this.createDetailRow('Created At', details.created_at)}
                             ${this.createDetailRow('Public IPv4', details.public_ip)}
                             ${this.createDetailRow('Private IPv4', details.private_ip)}
                             ${this.createDetailRow('VPC ID', details.vpc_id)}
@@ -873,13 +911,10 @@ const app = {
 
     app.refreshData = async function() {
         if (!this.isConnected) return;
-    
+
         try {
             this.showLoading();
-    
-            // Reload profiles and regions first
-            await this.loadProfilesAndRegions();
-    
+
             // Reload instances
             const response = await fetch('/api/refresh', {
                 method: 'POST'

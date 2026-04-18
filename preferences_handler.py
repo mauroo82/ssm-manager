@@ -17,7 +17,9 @@ class PreferencesHandler:
             "level": "INFO",
             "format": "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
         },
-        "dark_mode": False
+        "dark_mode": False,
+        "last_profile": "",
+        "last_region": ""
     }
 
     def __init__(self, config_file="preferences.json"):

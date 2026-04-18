@@ -46,8 +46,9 @@
                             </div>
                             <div class="col-auto">
                                 <button id="refreshProfilesBtn" class="btn btn-outline-secondary"
-                                    title="Refresh Profiles">
-                                    <i class="bi bi-arrow-clockwise"></i>
+                                    data-bs-toggle="tooltip" title="Refresh Profiles">
+                                    <i class="bi bi-person-fill"></i><i class="bi bi-arrow-clockwise"></i>
+                                    Profiles
                                 </button>
                             </div>
 
@@ -64,45 +65,16 @@
                                 </button>
                             </div>
 
-                            <div class="col-auto">
-                                <button id="refreshBtn"
-                                    class="btn btn-outline-secondary d-flex align-items-center justify-content-between">
-                                    <!-- Refresh sx -->
-                                    <i class="bi bi-arrow-clockwise fs-5 me-2" data-bs-toggle="tooltip"
-                                        title="Refresh"></i>
-
-                                    <!-- Switch auto-refresh dx -->
-                                    <div class="form-check form-switch m-1">
-                                        <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
-                                        <label class="form-check-label" for="autoRefreshSwitch">Auto Refresh</label>
-                                    </div>
-                                    <div class="col-auto">
-                                        <span id="refreshTimer" class="badge bg-primary"></span>
-                                    </div>
-                                </button>
-                            </div>
-                            <!--
-                            <div class="col-auto">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
-                                    <label class="form-check-label" for="autoRefreshSwitch">Auto Refresh</label>
-                                </div>
-                            </div>
-                            
-                            <div class="col-auto">
-                                <span id="refreshTimer" class="badge bg-secondary"></span>
-                            </div>
-                            -->
                             <div class="col-auto ms-auto">
-                                <button class="btn btn-outline-secondary" id="preferencesBtn">
-                                    <i class="bi bi-gear-fill fs-5" data-bs-toggle="tooltip" title="Setting"></i>
-                                    Settings
+                                <button class="btn btn-outline-secondary" id="preferencesBtn"
+                                    data-bs-toggle="tooltip" title="Settings">
+                                    <i class="bi bi-gear-fill fs-5"></i>
                                 </button>
                             </div>
                             <div class="col-auto">
-                                <button class="btn btn-outline-secondary" id="aboutBtn">
-                                    <i class="bi bi-info-circle-fill fs-5" data-bs-toggle="tooltip" title="About"></i>
-                                    About
+                                <button class="btn btn-outline-secondary" id="aboutBtn"
+                                    data-bs-toggle="tooltip" title="About">
+                                    <i class="bi bi-info-circle-fill fs-5"></i>
                                 </button>
                             </div>
                         </div>
@@ -118,12 +90,39 @@
                 <div class="card shadow-sm mb-4 mb-md-0">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
                         <div class="d-flex align-items-center gap-2">
-                            <h5 class="m-0">Instances </h5>
+                            <h5 class="m-0">Instances</h5>
                             <h5 class="m-0" id="accountIdContainer" style="display: none;">
                                 - AWS ID: <span id="awsAccountId"></span>
                             </h5>
                         </div>
-                        <span class="badge bg-primary" id="instanceCount">0 instances</span>
+                        <div class="d-flex align-items-stretch gap-2">
+                            <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2" id="instanceCount"
+                                data-bs-toggle="tooltip" title="Total instances">
+                                <i class="bi bi-stack"></i>
+                                <span id="countTotal">0</span>
+                            </span>
+                            <span class="badge bg-dark d-flex align-items-center gap-1 fs-6 px-2"
+                                data-bs-toggle="tooltip" title="Linux instances">
+                                <i class="bi bi-terminal"></i>
+                                <span id="countLinux">0</span>
+                            </span>
+                            <span class="badge bg-primary d-flex align-items-center gap-1 fs-6 px-2"
+                                data-bs-toggle="tooltip" title="Windows instances">
+                                <i class="bi bi-windows"></i>
+                                <span id="countWindows">0</span>
+                            </span>
+                            <span class="badge badge-fucsia d-flex align-items-center gap-1 fs-6 px-2"
+                                data-bs-toggle="tooltip" title="SSM-enabled instances">
+                                <i class="bi bi-shield-check"></i>
+                                <span id="countSsm">0</span>
+                            </span>
+                            <button id="refreshBtn"
+                                class="btn btn-sm btn-outline-secondary d-flex align-items-center gap-1"
+                                data-bs-toggle="tooltip" title="Refresh instances">
+                                <i class="bi bi-arrow-clockwise"></i>
+                                <span id="refreshTimer" class="badge bg-secondary"></span>
+                            </button>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div id="instancesList" class="row g-4">
@@ -316,12 +315,20 @@
                             <option value="ERROR">Error</option>
                         </select>
                     </div>
-                    <!-- Dark Mode -->
+                    <!-- Appearance -->
                     <div class="mb-3">
                         <h6>Appearance</h6>
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="darkModeSwitch">
                             <label class="form-check-label" for="darkModeSwitch">Dark Mode</label>
+                        </div>
+                    </div>
+                    <!-- Auto Refresh -->
+                    <div class="mb-3">
+                        <h6>Instance List</h6>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
+                            <label class="form-check-label" for="autoRefreshSwitch">Auto Refresh (every 30s)</label>
                         </div>
                     </div>
                 </div>
