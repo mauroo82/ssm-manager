@@ -516,7 +516,7 @@ const app = {
         document.getElementById('countWindows').textContent = windows;
         document.getElementById('countSsm').textContent = ssm;
 
-        this.elements.connectionCount.textContent = `${this.connections.length} active`;
+        document.getElementById('countActive').textContent = this.connections.length;
     },
 
     // Connection Management Methods
@@ -864,7 +864,7 @@ const app = {
     },
 
     generateConnectionId() {
-        return 'conn_' + Math.random().toString(36).substr(2, 9);
+        return 'conn_' + Math.random().toString(36).substring(2, 11);
     },
 
     // Connection monitoring
@@ -900,10 +900,15 @@ const app = {
         } catch (error) {
             console.error('Error checking connections:', error);
         }
-    }
+    },
 
+    // Stubs declared here so the IDE type system recognises these properties;
+    // the real implementations are assigned below via app.xxx = function() after the literal.
+    showPreferences: async function() {},
+    savePreferences: async function() {},
+    loadPreferences: async function() {},
 
-    };
+};
 
     
 
