@@ -31,14 +31,23 @@
 
 
             <div class="col">
-                <div class="card shadow-sm">
-                    <div class="card-body">
+                <div class="card ssm-header">
+                    <div class="card-body py-3">
                         <div class="row g-3 align-items-center">
-                            <!--
+
+                            <!-- Brand -->
                             <div class="col-auto">
-                            <img src="{{ url_for('static', filename='/images/logo.png') }}" alt="SSM Manager Logo" class="h-100" style="width: auto; min-height: 90px; max-width: 90px;">
+                                <div class="ssm-brand">
+                                    <i class="bi bi-hdd-network-fill"></i>
+                                    SSM Manager
+                                </div>
                             </div>
-                            -->
+
+                            <div class="col-auto">
+                                <div class="ssm-divider"></div>
+                            </div>
+
+                            <!-- Profile -->
                             <div class="col-auto">
                                 <select id="profileSelect" class="form-select">
                                     <option value="">Select Profile</option>
@@ -52,29 +61,34 @@
                                 </button>
                             </div>
 
-
+                            <!-- Region -->
                             <div class="col-auto">
                                 <select id="regionSelect" class="form-select">
                                     <option value="">Select Region</option>
                                 </select>
                             </div>
 
+                            <!-- Connect -->
                             <div class="col-auto">
-                                <button id="connectBtn" class="btn btn-success">
+                                <button id="connectBtn" class="btn btn-success px-4">
                                     <i class="bi bi-plug fs-5"></i> Connect
                                 </button>
                             </div>
 
+                            <!-- Right-side actions -->
                             <div class="col-auto ms-auto">
-                                <button class="btn btn-outline-secondary" id="preferencesBtn"
+                                <div class="ssm-divider"></div>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-outline-secondary ssm-icon-btn" id="preferencesBtn"
                                     data-bs-toggle="tooltip" title="Settings">
-                                    <i class="bi bi-gear-fill fs-5"></i>
+                                    <i class="bi bi-gear-fill"></i>
                                 </button>
                             </div>
                             <div class="col-auto">
-                                <button class="btn btn-outline-secondary" id="aboutBtn"
+                                <button class="btn btn-outline-secondary ssm-icon-btn" id="aboutBtn"
                                     data-bs-toggle="tooltip" title="About">
-                                    <i class="bi bi-info-circle-fill fs-5"></i>
+                                    <i class="bi bi-info-circle-fill"></i>
                                 </button>
                             </div>
                         </div>
@@ -83,11 +97,11 @@
             </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="row">
-            <!-- Instances Section - Now 8 columns -->
-            <div class="col-md-8">
-                <div class="card shadow-sm mb-4 mb-md-0">
+        <!-- Main Content — horizontal flex layout with collapsible connections panel -->
+        <div class="ssm-main-row">
+            <!-- Instances panel — grows to fill available space -->
+            <div class="ssm-instances-col">
+                <div class="card shadow-sm">
                     <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
                         <div class="d-flex align-items-center gap-2">
                             <h5 class="m-0">Instances</h5>
@@ -120,7 +134,7 @@
                                 class="btn btn-outline-secondary d-flex align-items-center gap-1 fs-6 px-2 py-0"
                                 data-bs-toggle="tooltip" title="Refresh instances">
                                 <i class="bi bi-arrow-clockwise"></i>
-                                <span id="refreshTimer" class="badge bg-secondary"></span>
+                                <span id="refreshTimer" class="ssm-timer-text"></span>
                             </button>
                         </div>
                     </div>
@@ -132,17 +146,31 @@
                 </div>
             </div>
 
-            <!-- Active Connections Section - Now 4 columns -->
-            <div class="col-md-4">
+            <!-- Active Connections panel — collapsible horizontally -->
+            <div class="ssm-connections-col collapsed" id="connectionsCol">
                 <div class="card shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <h5 class="m-0">Active Connections</h5>
-                        <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2" id="connectionCount">
+                    <!-- Single adaptive header: layout changes via CSS based on collapsed state -->
+                    <div class="card-header bg-white conn-header py-3">
+                        <h5 class="m-0 text-nowrap conn-title">Active Connections</h5>
+                        <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2 conn-badge" id="connectionCount">
                             <i class="bi bi-activity"></i>
                             <span id="countActive">0</span>
                         </span>
+                        <button class="btn btn-sm btn-outline-secondary ssm-icon-btn"
+                            id="toggleConnectionsBtn"
+                            data-bs-toggle="tooltip" title="Expand">
+                            <i class="bi bi-arrows-angle-expand" id="toggleConnectionsIcon"></i>
+                        </button>
+                        <!-- Collapsed mini-view: pulsing icon + count, whole strip is clickable -->
+                        <div class="conn-collapsed-view" id="connCollapsedView">
+                            <span class="conn-collapsed-icon" id="connCollapsedIconWrap">
+                                <i class="bi bi-activity"></i>
+                            </span>
+                            <span class="conn-collapsed-count" id="connCollapsedCount">0</span>
+                        </div>
                     </div>
-                    <div class="card-body">
+                    <!-- Body: hidden when collapsed -->
+                    <div class="card-body conn-body">
                         <div id="connectionsList">
                             <!-- Active connections will be shown here -->
                         </div>

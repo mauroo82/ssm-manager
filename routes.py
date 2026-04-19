@@ -136,7 +136,9 @@ def start_ssh(instance_id):
         
         # Crea il comando AWS SSM e avvia il processo
         cmd_command = f'aws ssm start-session --target {instance_id} --region {region} --profile {profile}'
-        process = subprocess.Popen(f'start cmd /k "{cmd_command}"', shell=True)
+        # /c closes cmd.exe automatically when aws ssm start-session exits,
+        # so the connection is detected as terminated as soon as the SSH session ends.
+        process = subprocess.Popen(f'start cmd /c "{cmd_command}"', shell=True)
         
         def find_cmd_pid():
             time.sleep(2)  # Wait for process to start

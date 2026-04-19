@@ -393,11 +393,17 @@ const app = {
     createInstanceCard(instance) {
         const card = document.createElement('div');
         card.className = `col-md-12 ${instance.has_ssm ? '' : 'non-ssm'}`;
-        
+
+        // OS class drives the left-border color in CSS
+        const os = (instance.os || '').toLowerCase();
+        const osClass = os.includes('windows') ? 'os-windows'
+                      : (os.includes('linux') || os.includes('unix')) ? 'os-linux'
+                      : '';
+
         const statusClass = instance.state === 'running' ? 'success' : 'danger';
-        
+
         card.innerHTML = `
-                <div class="card instance-card h-100">
+                <div class="card instance-card h-100 ${osClass}">
                     <div class="card-header d-flex justify-content-between align-items-start">
                         <div class="flex-grow-1">
                             <div class="mt-2"> 
@@ -996,11 +1002,37 @@ const app = {
         console.log('Setting up event listeners...');
         this.elements.connectBtn.onclick = () => this.toggleConnection();
         this.elements.refreshBtn.onclick = () => this.refreshData();
-        
-        // Modifica la gestione dell'evento autoRefreshSwitch
+
+        // Auto refresh toggle
         this.elements.autoRefreshSwitch.onchange = (e) => {
             this.toggleAutoRefresh(e.target.checked);
         };
+
+        // Horizontal expand/collapse of Active Connections panel
+        const toggleBtn      = document.getElementById('toggleConnectionsBtn');
+        const toggleIcon     = document.getElementById('toggleConnectionsIcon');
+        const connectionsCol = document.getElementById('connectionsCol');
+        const connHeader     = connectionsCol?.querySelector('.conn-header');
+
+        const togglePanel = () => {
+            if (!connectionsCol) return;
+            const isCollapsed = connectionsCol.classList.toggle('collapsed');
+            if (toggleIcon) {
+                toggleIcon.className = isCollapsed
+                    ? 'bi bi-arrows-angle-expand'
+                    : 'bi bi-arrows-angle-contract';
+            }
+        };
+
+        // Toggle button (visible in expanded mode)
+        if (toggleBtn) toggleBtn.onclick = (ev) => { ev.stopPropagation(); togglePanel(); };
+
+        // Clicking the entire header in collapsed mode expands the panel
+        if (connHeader) {
+            connHeader.addEventListener('click', (e) => {
+                if (connectionsCol.classList.contains('collapsed')) togglePanel();
+            });
+        }
     };
     
     app.updateRefreshTimer = function() {
@@ -1017,9 +1049,14 @@ const app = {
      * Applies or removes dark mode by toggling the data-bs-theme attribute on <html>.
      * @param {boolean} enabled - Whether dark mode should be active.
      */
+    /**
+     * Applies or removes dark mode by toggling the data-bs-theme attribute on <html>.
+     * @param {boolean} enabled
+     */
     app.applyDarkMode = function(enabled) {
         document.documentElement.setAttribute('data-bs-theme', enabled ? 'dark' : 'light');
     };
+
 
     app.showPreferences = async function() {
         console.log('Showing preferences dialog');
@@ -1057,7 +1094,6 @@ const app = {
             const endPort = parseInt(document.getElementById('endPort').value);
             const logLevel = document.getElementById('logLevel').value;
             const darkMode = document.getElementById('darkModeSwitch').checked;
-
             // Validate values
             if (startPort >= endPort) {
                 this.showError('Start port must be less than end port');
@@ -1090,7 +1126,7 @@ const app = {
 
             if (!response.ok) throw new Error('Failed to save preferences');
 
-            // Update local preferences and apply dark mode immediately
+            // Apply modes immediately and persist local copy
             this.preferences = newPreferences;
             this.applyDarkMode(darkMode);
 
@@ -1116,7 +1152,7 @@ const app = {
             this.preferences = await response.json();
             console.log('Loaded preferences:', this.preferences);
 
-            // Apply dark mode on startup based on saved preference
+            // Apply dark mode and compact mode on startup based on saved preferences
             this.applyDarkMode(this.preferences.dark_mode === true);
 
         } catch (error) {
@@ -1237,7 +1273,17 @@ const app = {
     app.renderConnections = function() {
         const container = this.elements.connectionsList;
         container.innerHTML = '';
-    
+
+        // Update collapsed mini-view: icon pulses amber + count when active
+        const iconWrap = document.getElementById('connCollapsedIconWrap');
+        const countEl  = document.getElementById('connCollapsedCount');
+        const active   = this.connections.length > 0;
+        if (iconWrap) iconWrap.className = `conn-collapsed-icon${active ? ' has-connections' : ''}`;
+        if (countEl) {
+            countEl.textContent = this.connections.length;
+            countEl.className   = `conn-collapsed-count${active ? ' has-connections' : ''}`;
+        }
+
         if (this.connections.length === 0) {
             container.innerHTML = `
                 <div class="text-center text-muted p-4">
