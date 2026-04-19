@@ -220,8 +220,10 @@ body {
     50%       { opacity: 0.55; transform: scale(0.88); }
 }
 
-[data-bs-theme="dark"] .conn-collapsed-icon        { color: #4b5563; }
-[data-bs-theme="dark"] .conn-collapsed-count       { color: #6b7280; }
+[data-bs-theme="dark"] .conn-collapsed-icon                    { color: #4b5563; }
+[data-bs-theme="dark"] .conn-collapsed-icon.has-connections    { color: var(--ssm-accent); }
+[data-bs-theme="dark"] .conn-collapsed-count                   { color: #6b7280; }
+[data-bs-theme="dark"] .conn-collapsed-count.has-connections   { color: var(--ssm-accent); }
 
 /* Settings / About icon-only buttons — same height as Connect button */
 .ssm-icon-btn {
