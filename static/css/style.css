@@ -1,26 +1,399 @@
-/* Card Styles */
+/* ============================================================
+   SSM Manager — Design System
+   ============================================================ */
+
+:root {
+    --ssm-brand:        #1a2332;
+    --ssm-accent:       #FF9900;
+    --ssm-accent-dark:  #cc7a00;
+    --ssm-bg:           #eef2f7;
+    --ssm-radius:       12px;
+    --ssm-radius-sm:    8px;
+    --ssm-shadow:       0 2px 12px rgba(0, 0, 0, 0.07);
+    --ssm-shadow-hover: 0 6px 24px rgba(0, 0, 0, 0.13);
+}
+
+/* ── Page background ── */
+body {
+    background-color: var(--ssm-bg) !important;
+    font-size: 0.925rem;
+}
+
+/* ============================================================
+   Header / Navbar  — light mode (default)
+   ============================================================ */
+.ssm-header {
+    background: #ffffff !important;
+    border: none !important;
+    border-top: 3px solid var(--ssm-accent) !important;
+    border-radius: var(--ssm-radius) !important;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+.ssm-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: var(--ssm-brand);
+    white-space: nowrap;
+    letter-spacing: 0.01em;
+}
+
+.ssm-brand i {
+    color: var(--ssm-accent);
+    font-size: 1.5rem;
+}
+
+.ssm-divider {
+    width: 1px;
+    height: 30px;
+    background: #dee2e6;
+    flex-shrink: 0;
+}
+
+/* Countdown timer text — no background, gray text */
+.ssm-timer-text {
+    color: #6c757d;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* ============================================================
+   Header — dark mode overrides
+   ============================================================ */
+[data-bs-theme="dark"] .ssm-header {
+    background: linear-gradient(135deg, var(--ssm-brand) 0%, #243447 100%) !important;
+    border-top-color: var(--ssm-accent) !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35) !important;
+}
+
+[data-bs-theme="dark"] .ssm-brand {
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .ssm-divider {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+[data-bs-theme="dark"] .ssm-header .form-select {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .ssm-header .form-select option {
+    background-color: var(--ssm-brand);
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .ssm-header .form-select:disabled {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.35);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-bs-theme="dark"] .ssm-header .btn-outline-secondary {
+    border-color: rgba(255, 255, 255, 0.3);
+    color: rgba(255, 255, 255, 0.85);
+}
+
+[data-bs-theme="dark"] .ssm-header .btn-outline-secondary:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.5);
+    color: #ffffff;
+}
+
+[data-bs-theme="dark"] .ssm-header .btn-outline-secondary:disabled {
+    border-color: rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.25);
+}
+
+[data-bs-theme="dark"] .ssm-timer-text {
+    color: #adb5bd;
+}
+
+/* ============================================================
+   Main content row — horizontal flex layout
+   ============================================================ */
+.ssm-main-row {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 1.5rem;
+}
+
+.ssm-instances-col {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+/* Connections panel — transitions between collapsed (56px) and expanded (340px) */
+.ssm-connections-col {
+    flex: 0 0 340px;
+    width: 340px;
+    overflow: hidden;
+    transition: flex-basis 0.3s ease, width 0.3s ease;
+    /* Stretch card to bottom of viewport */
+    display: flex;
+    flex-direction: column;
+}
+
+.ssm-connections-col .card {
+    flex: 1;
+    min-height: calc(100vh - 140px);
+}
+
+.ssm-connections-col.collapsed {
+    flex: 0 0 56px;
+    width: 56px;
+}
+
+/* Expanded: horizontal layout */
+.ssm-connections-col .conn-header {
+    display: flex;
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Collapsed: vertical, centered, compact padding */
+.ssm-connections-col.collapsed .conn-header {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.3rem;
+}
+
+/* Hide title, badge and toggle button in collapsed mode */
+.ssm-connections-col.collapsed .conn-title       { display: none; }
+.ssm-connections-col.collapsed .conn-badge       { display: none !important; }
+.ssm-connections-col.collapsed #toggleConnectionsBtn { display: none; }
+
+/* Collapsed strip is fully clickable */
+.ssm-connections-col.collapsed .conn-header { cursor: pointer; }
+
+/* Hide the body when collapsed */
+.ssm-connections-col.collapsed .conn-body   { display: none; }
+
+/* ── Collapsed mini-view ── */
+.conn-collapsed-view {
+    display: none;
+}
+.ssm-connections-col.collapsed .conn-collapsed-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Activity icon: gray at rest, amber + pulse when connections are active */
+.conn-collapsed-icon {
+    font-size: 1.5rem;
+    line-height: 1;
+    color: #ced4da;
+    transition: color 0.3s ease;
+}
+.conn-collapsed-icon.has-connections {
+    color: var(--ssm-accent);
+    animation: conn-icon-pulse 1.8s ease-in-out infinite;
+}
+
+/* Count number below the icon — always visible in collapsed view */
+.conn-collapsed-count {
+    font-size: 0.85rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #adb5bd;
+    transition: color 0.3s ease;
+    display: block;
+}
+.conn-collapsed-count.has-connections {
+    color: var(--ssm-accent);
+}
+
+@keyframes conn-icon-pulse {
+    0%, 100% { opacity: 1;    transform: scale(1); }
+    50%       { opacity: 0.55; transform: scale(0.88); }
+}
+
+[data-bs-theme="dark"] .conn-collapsed-icon        { color: #4b5563; }
+[data-bs-theme="dark"] .conn-collapsed-count       { color: #6b7280; }
+
+/* Settings / About icon-only buttons — same height as Connect button */
+.ssm-icon-btn {
+    height: calc(1.5em + 0.75rem + 2px); /* matches Bootstrap .btn default height */
+    width: 38px;
+    padding-left: 0;
+    padding-right: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    font-size: 1rem;
+}
+
+/* Connect / Disconnect button */
+#connectBtn {
+    background: linear-gradient(135deg, #198754, #146c43);
+    border: none;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: all 0.2s ease;
+}
+
+#connectBtn:hover {
+    background: linear-gradient(135deg, #157347, #0f5132);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(25, 135, 84, 0.4);
+}
+
+#connectBtn.btn-danger {
+    background: linear-gradient(135deg, #dc3545, #b02a37);
+}
+
+#connectBtn.btn-danger:hover {
+    background: linear-gradient(135deg, #b02a37, #842029);
+    box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+}
+
+/* ============================================================
+   Cards
+   ============================================================ */
+.card {
+    border-radius: var(--ssm-radius) !important;
+    border: none !important;
+    box-shadow: var(--ssm-shadow) !important;
+}
+
+.card-header {
+    border-radius: var(--ssm-radius) var(--ssm-radius) 0 0 !important;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    font-weight: 600;
+}
+
+/* ============================================================
+   Instance Cards
+   ============================================================ */
 .instance-card {
-    transition: all 0.3s ease;
-    cursor: pointer;
+    border-left: 4px solid #ced4da !important;
+    border-radius: var(--ssm-radius-sm) !important;
+    transition: all 0.25s ease;
+    cursor: default;
+}
+
+.instance-card.os-linux {
+    border-left-color: var(--ssm-accent) !important;
+}
+
+.instance-card.os-windows {
+    border-left-color: #0078d4 !important;
+}
+
+.instance-card.non-ssm {
+    opacity: 0.65;
 }
 
 .instance-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    box-shadow: var(--ssm-shadow-hover) !important;
 }
 
-.instance-card.non-ssm {
-    opacity: 0.7;
-}
-
-/* Badge Styles */
+/* ============================================================
+   Badge Styles
+   ============================================================ */
 .status-badge {
-    font-size: 0.8rem;
-    padding: 0.25rem 0.5rem;
+    font-size: 0.78rem;
+    padding: 0.25rem 0.55rem;
     border-radius: 20px;
+    font-weight: 500;
 }
 
-/* Loading Overlay */
+.badge-fucsia {
+    background-color: #e600b3;
+    color: #fff;
+}
+
+/* ============================================================
+   Connection Items
+   ============================================================ */
+.connection-item {
+    padding: 0.85rem 1rem;
+    border-radius: var(--ssm-radius-sm);
+    background: #f8f9fa;
+    margin-bottom: 0.6rem;
+    border: 1px solid #e9ecef;
+    border-left: 4px solid #0d6efd !important;
+    transition: background 0.15s ease;
+}
+
+.connection-item:hover {
+    background: #e9ecef;
+}
+
+/* ============================================================
+   Custom Button Colors
+   ============================================================ */
+.btn-purple {
+    background-color: #7b2d8b;
+    border-color: #7b2d8b;
+    color: #fff;
+}
+
+.btn-purple:hover {
+    background-color: #62246f;
+    border-color: #62246f;
+    color: #fff;
+}
+
+.btn-ottanio {
+    background-color: #267896;
+    border-color: #267896;
+    color: #fff;
+}
+
+.btn-ottanio:hover {
+    background-color: #1f617a;
+    border-color: #1f617a;
+    color: #fff;
+}
+
+/* ============================================================
+   Modals
+   ============================================================ */
+.modal-content {
+    border: none !important;
+    border-radius: var(--ssm-radius) !important;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.18) !important;
+    overflow: hidden;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, var(--ssm-brand) 0%, #243447 100%) !important;
+    border-bottom: none !important;
+    color: #ffffff;
+}
+
+.modal-header .modal-title {
+    color: #ffffff;
+    font-weight: 600;
+}
+
+.modal-header .btn-close {
+    filter: invert(1) grayscale(1) brightness(2);
+}
+
+.modal-footer {
+    background-color: #f8f9fa;
+    border-top: 1px solid rgba(0, 0, 0, 0.06) !important;
+}
+
+/* ============================================================
+   Loading Overlay
+   ============================================================ */
 .loading-overlay {
     position: fixed;
     top: 0;
@@ -33,115 +406,81 @@
     align-items: center;
     z-index: 9999;
 }
-/* custom button color */
-.btn-purple {
-    background-color: #800080;
-    border-color: #800080;
-    color: #fff; 
-}
-.btn-purple:hover {
-    background-color: #660066; 
-    border-color: #660066;
-}
-.btn-ottanio {
-    background-color: #267896FF;
-    border-color: #267896FF;
-    color: #fff; 
-}
-.btn-ottanio:hover {
-    background-color: #1f617a; 
-    border-color: #1f617a;
-}
-
-.badge-fucsia {
-    background-color: #FF00CCFF;
-    color: #fff; 
-}
-
-/* Connection Item */
-.connection-item {
-    padding: 1rem;
-    border-radius: 0.5rem;
-    background: #f8f9fa;
-    margin-bottom: 0.5rem;
-    border: 1px solid #dee2e6;
-}
-
-.connection-item:hover {
-    background: #e9ecef;
-}
-
-/* Custom Scrollbar */
-::-webkit-scrollbar {
-    width: 8px;
-}
-
-::-webkit-scrollbar-track {
-    background: #f1f1f1;
-}
-
-::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 4px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-    background: #555;
-}
-
-/* Utility Classes */
-.cursor-pointer {
-    cursor: pointer;
-}
-
-.text-small {
-    font-size: 0.875rem;
-}
-
-/* Toast Customization */
-.toast {
-    opacity: 0.95;
-}
-
-/* Modal Customization */
-.modal-header {
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
-}
-
-.modal-footer {
-    background-color: #f8f9fa;
-    border-top: 1px solid #dee2e6;
-}
-
-
-.modal.show {
-    transition: opacity 0.2s ease-in-out;
-    opacity: 1 !important; /* Forza l'opacità a 1 quando il modal è mostrato */
-}
 
 #loadingOverlay {
     transition: opacity 0.2s ease-in-out;
     z-index: 1060;
 }
 
-/* classe per i modal durante il loading */
+#loadingOverlay .spinner-border {
+    width: 3rem;
+    height: 3rem;
+    border-width: 4px;
+    color: var(--ssm-accent) !important;
+}
+
+/* ============================================================
+   Modal visibility
+   ============================================================ */
+.modal.show {
+    transition: opacity 0.2s ease-in-out;
+    opacity: 1 !important;
+}
+
 .modal-loading {
     opacity: 0.5 !important;
 }
 
-
-/* Enable text selection */
-* {
-    -webkit-user-select: text; /* Safari */
-    -moz-user-select: text;    /* Firefox */
-    -ms-user-select: text;     /* Internet Explorer/Edge */
-    user-select: text;         /* Standard */
+/* ============================================================
+   Custom Scrollbar
+   ============================================================ */
+::-webkit-scrollbar {
+    width: 6px;
 }
 
-/* Dark mode overrides for custom components not covered by Bootstrap's data-bs-theme */
+::-webkit-scrollbar-track {
+    background: transparent;
+}
 
-/* Override Bootstrap utility classes that force light colors */
+::-webkit-scrollbar-thumb {
+    background: #ced4da;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #adb5bd;
+}
+
+/* ============================================================
+   Utility
+   ============================================================ */
+.cursor-pointer { cursor: pointer; }
+.text-small { font-size: 0.875rem; }
+
+* {
+    -webkit-user-select: text;
+    -moz-user-select: text;
+    -ms-user-select: text;
+    user-select: text;
+}
+
+.toast { opacity: 0.95; }
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.toast {
+    border-radius: var(--ssm-radius-sm) !important;
+    box-shadow: var(--ssm-shadow) !important;
+}
+
+/* ============================================================
+   DARK MODE OVERRIDES
+   ============================================================ */
+[data-bs-theme="dark"] body {
+    background-color: #111827 !important;
+}
+
 [data-bs-theme="dark"] body.bg-light,
 [data-bs-theme="dark"] .bg-light {
     background-color: var(--bs-body-bg) !important;
@@ -152,47 +491,42 @@
 }
 
 [data-bs-theme="dark"] .card {
-    background-color: var(--bs-body-bg);
-    border-color: var(--bs-border-color);
+    background-color: #1e2a3a;
+    border-color: #2d3f52 !important;
 }
 
 [data-bs-theme="dark"] .card-header {
-    background-color: var(--bs-secondary-bg) !important;
-    border-bottom-color: var(--bs-border-color);
+    background-color: #162030 !important;
+    border-bottom-color: #2d3f52 !important;
 }
 
 [data-bs-theme="dark"] .connection-item {
-    background: #2c3034;
-    border-color: #495057;
+    background: #1e2a3a;
+    border-color: #2d3f52 !important;
     color: #dee2e6;
 }
 
 [data-bs-theme="dark"] .connection-item:hover {
-    background: #343a40;
+    background: #253344;
 }
 
-[data-bs-theme="dark"] .modal-header {
-    background-color: #2c3034;
-    border-bottom-color: #495057;
+[data-bs-theme="dark"] .modal-content {
+    background-color: #1e2a3a;
 }
 
 [data-bs-theme="dark"] .modal-footer {
-    background-color: #2c3034;
-    border-top-color: #495057;
+    background-color: #162030;
+    border-top-color: #2d3f52 !important;
 }
 
 [data-bs-theme="dark"] #loadingOverlay {
-    background: rgba(33, 37, 41, 0.85);
-}
-
-[data-bs-theme="dark"] ::-webkit-scrollbar-track {
-    background: #343a40;
+    background: rgba(17, 24, 39, 0.85);
 }
 
 [data-bs-theme="dark"] ::-webkit-scrollbar-thumb {
-    background: #6c757d;
+    background: #4b5563;
 }
 
 [data-bs-theme="dark"] ::-webkit-scrollbar-thumb:hover {
-    background: #adb5bd;
+    background: #6b7280;
 }
