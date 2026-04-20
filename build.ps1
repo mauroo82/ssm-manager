@@ -12,7 +12,6 @@ pyinstaller --onedir --noconsole `
   --add-data "static/css;static/css" `
   --add-data "static/js;static/js" `
   --add-data "templates;templates" `
-  --add-data "preferences.json;." `
   --add-data "image;image" `
   --add-data "splash.jpg;." `
   --add-data "icon.ico;." `
