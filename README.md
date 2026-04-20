@@ -65,23 +65,24 @@ SSM Manager is a Windows desktop application that provides a graphical interface
   - Dynamic local port assignment
   - One-click `localhost:<port>` link for HTTP/HTTPS tunnels
 
+- **File Transfer (SCP)** — Linux instances only
+  - Upload a local file to the remote instance or download a file from it
+  - Transfer runs over a temporary SSM SSH tunnel (port 22) — no manual setup needed
+  - Native file/folder browser to select local paths
+  - Real-time progress bar with percentage, transfer speed and ETA
+  - If `scp` is not installed locally, the app shows step-by-step installation instructions
+
 ### Active Connection Management
 - Active connections displayed inline inside the expanded instance card
 - Each connection shows: type badge (SSH = black, RDP = blue, custom = purple), start timestamp, local and remote port details
 - One-click terminate button per connection
 - Active connection count badge in the instance list header
 
-### UI & Usability
-- **Dark mode** toggle in Settings, persisted across sessions
-- **Modern design system** — brand header with orange accent, rounded cards, smooth transitions
-- Instance cards have a colored left border: black for Linux, blue for Windows
-- Instance counter badges are semi-transparent by default; highlight on hover; show a focus ring when a filter is active
-- Search box with rounded pill style, gray background, and instant filtering
-
 ### Additional Features
 - App version shown in the About modal with a link to release notes
 - Logging system with configurable log level (in Settings)
 - Last used profile and region restored on next launch
+- Dark mode toggle in Settings, persisted across sessions
 
 ## Requirements
 
