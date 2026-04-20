@@ -13,6 +13,12 @@ const app = {
     instanceSearch: '',
     currentPage: 1,
     expandedInstances: new Set(),
+    // File transfer state
+    currentTransferInstanceId: null,
+    currentTransferInstanceName: null,
+    transferDirection: 'upload',
+    activeTransferId: null,
+    transferPollTimer: null,
     awsAccountId: null,  // Add AWS account ID state 
     // Cached DOM elements
     elements: {},
@@ -112,6 +118,18 @@ const app = {
             this.modals.about = new bootstrap.Modal(aboutModal);
         } else {
             console.warn('About modal element not found');
+        }
+
+        const fileTransferModal = document.getElementById('fileTransferModal');
+        if (fileTransferModal) {
+            this.modals.fileTransfer = new bootstrap.Modal(fileTransferModal);
+            // Reset state when modal is closed so a new transfer starts clean
+            fileTransferModal.addEventListener('hidden.bs.modal', () => {
+                this.cancelTransfer();
+                this.resetTransferModal();
+            });
+        } else {
+            console.warn('File transfer modal element not found');
         }
 
         // Setup about button
@@ -534,6 +552,14 @@ const app = {
                                 <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instance.id}')">
                                     <i class="bi bi-arrow-left-right"></i> Port
                                 </button>
+                                ${!os.includes('windows') ? `
+                                <button class="btn btn-sm btn-success text-white"
+                                        data-instance-id="${instance.id}"
+                                        data-instance-name="${(instance.name || '').replace(/"/g, '&quot;')}"
+                                        onclick="app.openFileTransfer(this.dataset.instanceId, this.dataset.instanceName)"
+                                        data-bs-toggle="tooltip" title="File Transfer (SCP)">
+                                    <i class="bi bi-files"></i> File
+                                </button>` : ''}
                             ` : ''}
                             <button class="btn btn-sm btn-ottanio text-white" onclick="app.showInstanceDetails('${instance.id}')">
                                 <i class="bi bi-info-circle"></i> Info
@@ -1547,6 +1573,270 @@ const app = {
     };
    
     
+
+// ---------------------------------------------------------------------------
+// File Transfer methods
+// ---------------------------------------------------------------------------
+
+/**
+ * Opens the File Transfer modal for the given instance.
+ * Checks SCP availability and shows an installation guide if missing.
+ * @param {string} instanceId
+ * @param {string} instanceName
+ */
+app.openFileTransfer = async function(instanceId, instanceName) {
+    this.currentTransferInstanceId = instanceId;
+    this.currentTransferInstanceName = instanceName;
+
+    // Reset modal to clean state before showing
+    this.resetTransferModal();
+    document.getElementById('ftInstanceName').textContent = instanceName || instanceId;
+
+    if (this.modals.fileTransfer) {
+        this.modals.fileTransfer.show();
+    }
+
+    // Check SCP availability asynchronously after the modal is visible
+    try {
+        const res  = await fetch('/api/check-scp');
+        const data = await res.json();
+        document.getElementById('ftScpWarning').style.display = data.available ? 'none' : 'block';
+        document.getElementById('ftTransferBtn').disabled = !data.available;
+    } catch (e) {
+        console.error('SCP check failed:', e);
+    }
+};
+
+/**
+ * Switches the transfer direction between 'upload' and 'download',
+ * toggling button styles and showing the relevant form fields.
+ * @param {'upload'|'download'} direction
+ */
+app.setTransferDirection = function(direction) {
+    this.transferDirection = direction;
+    const uploadBtn     = document.getElementById('ftBtnUpload');
+    const downloadBtn   = document.getElementById('ftBtnDownload');
+    const uploadFields  = document.getElementById('ftUploadFields');
+    const downloadFields = document.getElementById('ftDownloadFields');
+
+    if (direction === 'upload') {
+        uploadBtn.className   = 'btn btn-primary flex-fill ft-dir-btn';
+        downloadBtn.className = 'btn btn-outline-secondary flex-fill ft-dir-btn';
+        uploadFields.style.display  = 'block';
+        downloadFields.style.display = 'none';
+    } else {
+        downloadBtn.className = 'btn btn-primary flex-fill ft-dir-btn';
+        uploadBtn.className   = 'btn btn-outline-secondary flex-fill ft-dir-btn';
+        downloadFields.style.display = 'block';
+        uploadFields.style.display  = 'none';
+    }
+
+    // Reset progress UI when switching direction so a previous completed/failed
+    // transfer does not leave the button in a "Done" or disabled state.
+    this._resetTransferProgressUI();
+};
+
+/**
+ * Opens a native file or folder dialog (via the Flask /api/file-dialog route
+ * which delegates to pywebview) and puts the selected path into an input field.
+ * @param {string} inputId - ID of the <input> to populate.
+ * @param {'open'|'folder'} type - Dialog type.
+ */
+app.browseFile = async function(inputId, type) {
+    try {
+        const res  = await fetch('/api/file-dialog', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type }),
+        });
+        const data = await res.json();
+        if (data.path) {
+            document.getElementById(inputId).value = data.path;
+        }
+    } catch (e) {
+        console.error('File dialog error:', e);
+    }
+};
+
+/**
+ * Validates the form, sends the transfer request to the backend,
+ * and starts polling for progress.
+ */
+app.startTransfer = async function() {
+    const instanceId = this.currentTransferInstanceId;
+    if (!instanceId) return;
+
+    const direction  = this.transferDirection;
+    const remoteUser = (document.getElementById('ftRemoteUser').value || '').trim();
+    const keyPath    = (document.getElementById('ftKeyPath').value || '').trim();
+
+    let localPath, remotePath;
+    if (direction === 'upload') {
+        localPath  = (document.getElementById('ftLocalFile').value || '').trim();
+        remotePath = (document.getElementById('ftRemoteDestPath').value || '').trim();
+    } else {
+        remotePath = (document.getElementById('ftRemoteFilePath').value || '').trim();
+        localPath  = (document.getElementById('ftLocalDestFolder').value || '').trim();
+    }
+
+    if (!remoteUser || !localPath || !remotePath) {
+        this.showError('Please fill in all required fields.');
+        return;
+    }
+
+    // Reveal progress section and lock the form for the duration of the transfer
+    const pbEl = document.getElementById('ftProgressBar');
+    pbEl.style.width = '0%';
+    pbEl.textContent = '0%';
+    pbEl.className = 'progress-bar progress-bar-striped progress-bar-animated bg-primary';
+
+    document.getElementById('ftProgress').style.display = 'block';
+    document.getElementById('ftTransferBtn').style.display = 'none';
+    document.getElementById('ftCancelBtn').style.display = 'inline-block';
+    document.getElementById('ftProgressMsg').textContent = 'Starting…';
+    document.getElementById('ftProgressSpeed').textContent = '';
+    document.getElementById('ftProgressEta').textContent = '';
+    document.getElementById('ftProgressFile').textContent =
+        direction === 'upload'
+            ? localPath.split(/[\\/]/).pop()
+            : remotePath.split('/').pop();
+
+    try {
+        const res  = await fetch(`/api/transfer/${instanceId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                direction,
+                remote_user: remoteUser,
+                key_path:    keyPath,
+                local_path:  localPath,
+                remote_path: remotePath,
+                profile:     this.currentProfile,
+                region:      this.currentRegion,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to start transfer');
+
+        this.activeTransferId = data.transfer_id;
+        this.pollTransferProgress();
+    } catch (e) {
+        this.showError('Transfer error: ' + e.message);
+        this._resetTransferProgressUI();
+    }
+};
+
+/**
+ * Polls /api/transfer-progress every 500 ms and updates the progress bar.
+ * Stops automatically when status is 'completed', 'error', or 'cancelled'.
+ */
+app.pollTransferProgress = function() {
+    if (this.transferPollTimer) clearTimeout(this.transferPollTimer);
+
+    const poll = async () => {
+        if (!this.activeTransferId) return;
+        try {
+            const res  = await fetch(`/api/transfer-progress/${this.activeTransferId}`);
+            const data = await res.json();
+
+            const pbEl = document.getElementById('ftProgressBar');
+            const pct  = data.progress || 0;
+            pbEl.style.width = `${pct}%`;
+            pbEl.textContent = `${pct}%`;
+            document.getElementById('ftProgressMsg').textContent   = data.message || '';
+            document.getElementById('ftProgressSpeed').textContent = data.speed   || '';
+            document.getElementById('ftProgressEta').textContent   = data.eta ? `ETA ${data.eta}` : '';
+
+            if (data.status === 'completed') {
+                pbEl.className = 'progress-bar bg-success';
+                pbEl.style.width = '100%';
+                pbEl.textContent = '100%';
+                document.getElementById('ftCancelBtn').style.display = 'none';
+                const transferBtn = document.getElementById('ftTransferBtn');
+                transferBtn.style.display = 'inline-block';
+                transferBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Done';
+                transferBtn.disabled = true;
+                this.showSuccess('File transfer completed successfully!');
+                this.activeTransferId = null;
+                return;
+            }
+
+            if (data.status === 'error') {
+                pbEl.className = 'progress-bar bg-danger';
+                document.getElementById('ftProgressMsg').textContent = data.message || 'Transfer failed.';
+                this.showError('Transfer failed: ' + data.message);
+                this._resetTransferProgressUI();
+                this.activeTransferId = null;
+                return;
+            }
+
+            if (data.status === 'cancelled') {
+                this.activeTransferId = null;
+                return;
+            }
+
+            // Still in progress — schedule next poll
+            this.transferPollTimer = setTimeout(poll, 500);
+        } catch (e) {
+            console.error('Progress poll error:', e);
+            this.transferPollTimer = setTimeout(poll, 1000);
+        }
+    };
+
+    poll();
+};
+
+/**
+ * Cancels the active transfer (if any) by calling DELETE /api/transfer/<id>.
+ */
+app.cancelTransfer = async function() {
+    if (!this.activeTransferId) return;
+    if (this.transferPollTimer) clearTimeout(this.transferPollTimer);
+    try {
+        await fetch(`/api/transfer/${this.activeTransferId}`, { method: 'DELETE' });
+    } catch (e) { /* best-effort */ }
+    this.activeTransferId = null;
+    this._resetTransferProgressUI();
+};
+
+/**
+ * Resets all modal inputs and state to their initial values.
+ * Called when the modal opens (fresh start) or is dismissed.
+ */
+app.resetTransferModal = function() {
+    this.transferDirection = 'upload';
+    if (this.transferPollTimer) clearTimeout(this.transferPollTimer);
+
+    // Direction buttons — reset to Upload selected
+    document.getElementById('ftBtnUpload').className   = 'btn btn-primary flex-fill ft-dir-btn';
+    document.getElementById('ftBtnDownload').className = 'btn btn-outline-secondary flex-fill ft-dir-btn';
+    document.getElementById('ftUploadFields').style.display  = 'block';
+    document.getElementById('ftDownloadFields').style.display = 'none';
+
+    // Clear all path inputs; keep remote user default
+    ['ftLocalFile', 'ftRemoteDestPath', 'ftRemoteFilePath', 'ftLocalDestFolder', 'ftKeyPath']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    document.getElementById('ftRemoteUser').value = 'ec2-user';
+    document.getElementById('ftScpWarning').style.display = 'none';
+
+    this._resetTransferProgressUI();
+};
+
+/**
+ * Resets only the progress section and the Transfer/Cancel buttons.
+ * @private
+ */
+app._resetTransferProgressUI = function() {
+    document.getElementById('ftProgress').style.display = 'none';
+    const btn = document.getElementById('ftTransferBtn');
+    btn.style.display = 'inline-block';
+    btn.innerHTML = '<i class="bi bi-send me-1"></i>Transfer';
+    btn.disabled = false;
+    document.getElementById('ftCancelBtn').style.display = 'none';
+};
 
 // Initialize app when document is ready
 document.addEventListener('DOMContentLoaded', () => app.init());

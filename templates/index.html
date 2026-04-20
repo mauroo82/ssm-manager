@@ -355,6 +355,146 @@
     </div>
 
 
+    <!-- File Transfer Modal -->
+    <div class="modal fade" id="fileTransferModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header ssm-modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-files me-2"></i>File Transfer &mdash; <span id="ftInstanceName"></span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- SCP not available warning -->
+                    <div id="ftScpWarning" style="display:none">
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>SCP not found on this machine.</strong>
+                            File transfer requires <code>scp</code> (OpenSSH). Install it via one of:
+                            <ul class="mt-2 mb-0 small">
+                                <li><strong>Option A (recommended):</strong> Windows Settings → Apps → Optional Features → <em>OpenSSH Client</em></li>
+                                <li><strong>Option B:</strong> <code>winget install Microsoft.OpenSSH.Beta</code></li>
+                                <li><strong>Option C:</strong> Install <a href="https://git-scm.com/download/win" target="_blank">Git for Windows</a> (bundles scp)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Direction selector -->
+                    <div class="d-flex gap-2 mb-4">
+                        <button class="btn btn-primary flex-fill ft-dir-btn" id="ftBtnUpload"
+                                onclick="app.setTransferDirection('upload')">
+                            <i class="bi bi-upload me-2"></i><strong>Upload</strong>
+                            <div class="small opacity-75">Local &rarr; Remote</div>
+                        </button>
+                        <button class="btn btn-outline-secondary flex-fill ft-dir-btn" id="ftBtnDownload"
+                                onclick="app.setTransferDirection('download')">
+                            <i class="bi bi-download me-2"></i><strong>Download</strong>
+                            <div class="small opacity-75">Remote &rarr; Local</div>
+                        </button>
+                    </div>
+
+                    <!-- Common fields -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Remote User</label>
+                            <input type="text" class="form-control" id="ftRemoteUser"
+                                   value="ec2-user" placeholder="ec2-user">
+                        </div>
+                        <div class="col-sm-8">
+                            <label class="form-label fw-semibold">
+                                SSH Key (.pem)
+                                <span class="text-muted fw-normal small">— optional if ssh-agent is active</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ftKeyPath"
+                                       placeholder="Leave empty if using ssh-agent or key in ~/.ssh">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="app.browseFile('ftKeyPath', 'open')">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upload-specific fields -->
+                    <div id="ftUploadFields">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Local File</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ftLocalFile"
+                                       placeholder="Select the file to upload…">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="app.browseFile('ftLocalFile', 'open')">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Remote Destination Path</label>
+                            <input type="text" class="form-control" id="ftRemoteDestPath"
+                                   placeholder="/home/ec2-user/">
+                            <div class="form-text">Directory on the remote instance where the file will be placed.</div>
+                        </div>
+                    </div>
+
+                    <!-- Download-specific fields -->
+                    <div id="ftDownloadFields" style="display:none">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Remote File Path</label>
+                            <input type="text" class="form-control" id="ftRemoteFilePath"
+                                   placeholder="/home/ec2-user/file.txt">
+                            <div class="form-text">Full path of the file on the remote instance.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Local Destination Folder</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ftLocalDestFolder"
+                                       placeholder="Select folder where to save the file…">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="app.browseFile('ftLocalDestFolder', 'folder')">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress section — hidden until transfer starts -->
+                    <div id="ftProgress" style="display:none">
+                        <hr class="my-3">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <small class="fw-semibold" id="ftProgressFile"></small>
+                            <small class="text-muted" id="ftProgressSpeed"></small>
+                        </div>
+                        <div class="progress mb-1" style="height:22px; border-radius:6px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 id="ftProgressBar" role="progressbar"
+                                 style="width:0%; font-size:0.8rem; font-weight:600;">0%</div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted" id="ftProgressMsg"></small>
+                            <small class="text-muted" id="ftProgressEta"></small>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                            onclick="app.cancelTransfer()">Close</button>
+                    <button type="button" class="btn btn-danger" id="ftCancelBtn" style="display:none"
+                            onclick="app.cancelTransfer()">
+                        <i class="bi bi-x-circle me-1"></i>Cancel Transfer
+                    </button>
+                    <button type="button" class="btn btn-success" id="ftTransferBtn"
+                            onclick="app.startTransfer()">
+                        <i class="bi bi-send me-1"></i>Transfer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Toast Container -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
         <!-- Toasts will be added here -->

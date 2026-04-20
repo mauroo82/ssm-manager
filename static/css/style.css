@@ -630,3 +630,34 @@ body {
 [data-bs-theme="dark"] ::-webkit-scrollbar-thumb:hover {
     background: #6b7280;
 }
+
+/* ============================================================
+   File Transfer Modal
+   ============================================================ */
+
+/* Direction selection buttons */
+.ft-dir-btn {
+    padding: 0.65rem 1rem;
+    border-radius: var(--ssm-radius-sm) !important;
+    text-align: center;
+    transition: all 0.2s ease;
+}
+.ft-dir-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.12);
+}
+
+/* Progress bar container */
+#ftProgress .progress {
+    background-color: #e9ecef;
+}
+[data-bs-theme="dark"] #ftProgress .progress {
+    background-color: #2d3f52;
+}
+
+/* Ensure the progress bar label is readable */
+#ftProgressBar {
+    min-width: 2.5rem;
+    transition: width 0.3s ease;
+    line-height: 22px;
+}
