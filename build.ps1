@@ -35,4 +35,4 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "Done! Installer ready in: installer\SSM-Manager-v1.31-setup.exe" -ForegroundColor Green
+Write-Host "Done! Installer ready in: installer\SSM-Manager-v2.0-setup.exe" -ForegroundColor Green

@@ -9,6 +9,16 @@ const app = {
     currentRegion: '',
     instances: [],
     connections: [],
+    instanceFilter: null,
+    instanceSearch: '',
+    currentPage: 1,
+    expandedInstances: new Set(),
+    // File transfer state
+    currentTransferInstanceId: null,
+    currentTransferInstanceName: null,
+    transferDirection: 'upload',
+    activeTransferId: null,
+    transferPollTimer: null,
     awsAccountId: null,  // Add AWS account ID state 
     // Cached DOM elements
     elements: {},
@@ -42,17 +52,15 @@ const app = {
     cacheElements() {
         console.log('Caching DOM elements...');
         this.elements = {
-            profileSelect: document.getElementById('profileSelect'),
-            regionSelect: document.getElementById('regionSelect'),
-            connectBtn: document.getElementById('connectBtn'),
-            refreshBtn: document.getElementById('refreshBtn'),
-            autoRefreshSwitch: document.getElementById('autoRefreshSwitch'),
-            refreshTimer: document.getElementById('refreshTimer'),
-            instancesList: document.getElementById('instancesList'),
-            connectionsList: document.getElementById('connectionsList'),
-            instanceCount: document.getElementById('instanceCount'),
-            connectionCount: document.getElementById('connectionCount'),
-            loadingOverlay: document.getElementById('loadingOverlay')  // 
+            profileSelect:    document.getElementById('profileSelect'),
+            regionSelect:     document.getElementById('regionSelect'),
+            connectBtn:       document.getElementById('connectBtn'),
+            refreshBtn:       document.getElementById('refreshBtn'),
+            autoRefreshSwitch:document.getElementById('autoRefreshSwitch'),
+            refreshTimer:     document.getElementById('refreshTimer'),
+            instancesList:    document.getElementById('instancesList'),
+            instanceCount:    document.getElementById('instanceCount'),
+            loadingOverlay:   document.getElementById('loadingOverlay')
         };
     },
 
@@ -110,6 +118,18 @@ const app = {
             this.modals.about = new bootstrap.Modal(aboutModal);
         } else {
             console.warn('About modal element not found');
+        }
+
+        const fileTransferModal = document.getElementById('fileTransferModal');
+        if (fileTransferModal) {
+            this.modals.fileTransfer = new bootstrap.Modal(fileTransferModal);
+            // Reset state when modal is closed so a new transfer starts clean
+            fileTransferModal.addEventListener('hidden.bs.modal', () => {
+                this.cancelTransfer();
+                this.resetTransferModal();
+            });
+        } else {
+            console.warn('File transfer modal element not found');
         }
 
         // Setup about button
@@ -186,56 +206,61 @@ const app = {
         this.elements.autoRefreshSwitch.onchange = (e) => this.toggleAutoRefresh(e);
     },
 
-    // Load profiles and regions
-
+    // Load profiles, regions and restore last used selections from preferences.json
     async loadProfilesAndRegions() {
         console.log('[Profile Loading] Starting to load profiles and regions...');
         try {
-            // First attempt to load profiles
-            const profilesRes = await fetch('/api/profiles');
-            console.log('[Profile Loading] Profile response:', profilesRes);
-            
-            if (!profilesRes.ok) {
-                throw new Error(`Failed to load profiles: ${profilesRes.status}`);
-            }
+            // Fetch profiles, regions and saved preferences in parallel
+            const [profilesRes, regionsRes, prefsRes] = await Promise.all([
+                fetch('/api/profiles'),
+                fetch('/api/regions'),
+                fetch('/api/preferences')
+            ]);
+
+            if (!profilesRes.ok) throw new Error(`Failed to load profiles: ${profilesRes.status}`);
+            if (!regionsRes.ok) throw new Error(`Failed to load regions: ${regionsRes.status}`);
+
             const profiles = await profilesRes.json();
-            console.log('[Profile Loading] Loaded profiles:', profiles);
-
-            // Then load regions
-            const regionsRes = await fetch('/api/regions');
-            console.log('[Profile Loading] Region response:', regionsRes);
-            
-            if (!regionsRes.ok) {
-                throw new Error(`Failed to load regions: ${regionsRes.status}`);
-            }
             const regions = await regionsRes.json();
-            console.log('[Profile Loading] Loaded regions:', regions);
+            const prefs = prefsRes.ok ? await prefsRes.json() : {};
 
-            // Update dropdowns only if we have valid data
             if (Array.isArray(profiles)) {
                 this.updateSelect(this.elements.profileSelect, profiles);
-            } else {
-                console.error('[Profile Loading] Invalid profiles data:', profiles);
+                // Restore last profile only if it still exists in the list
+                const saved = prefs.last_profile || '';
+                if (saved && profiles.includes(saved)) {
+                    this.elements.profileSelect.value = saved;
+                }
             }
-            
+
             if (Array.isArray(regions)) {
                 this.updateSelect(this.elements.regionSelect, regions);
-            } else {
-                console.error('[Profile Loading] Invalid regions data:', regions);
+                // Restore last region only if it still exists in the list
+                const saved = prefs.last_region || '';
+                if (saved && regions.includes(saved)) {
+                    this.elements.regionSelect.value = saved;
+                }
             }
         } catch (error) {
             console.error('[Profile Loading] Error loading profiles and regions:', error);
-            // Show error to user
             this.showError('Failed to load profiles and regions: ' + error.message);
         }
     },
 
-    // Update select element with options
+    /**
+     * Populates a select element with options, then restores the last saved value
+     * from localStorage if it still exists in the new list.
+     * Falls back to the placeholder option if the saved value is no longer valid.
+     * @param {HTMLSelectElement} select - The select element to populate.
+     * @param {string[]} options - The list of option values.
+     */
     updateSelect(select, options) {
         if (!select || !options) return;
         console.log(`Updating select ${select.id} with options:`, options);
-        
-        select.innerHTML = `<option value="">Select ${select.id.replace('Select', '')}</option>`;
+
+        // Build placeholder: "Select Profile" / "Select Region"
+        const label = select.id.replace('Select', '');
+        select.innerHTML = `<option value="">Select ${label}</option>`;
         options.forEach(option => {
             const opt = document.createElement('option');
             opt.value = option;
@@ -282,10 +307,18 @@ const app = {
 
                 this.elements.connectBtn.innerHTML = '<i class="bi bi-plug fs-5"></i> Disconnect';
                 this.elements.connectBtn.classList.replace('btn-success', 'btn-danger');
-            
-                // Save last used profile/region
-                localStorage.setItem('lastProfile', profile);
-                localStorage.setItem('lastRegion', region);
+
+                // Lock dropdowns — profile/region cannot change while connected
+                this.elements.profileSelect.disabled = true;
+                this.elements.regionSelect.disabled = true;
+                document.getElementById('refreshProfilesBtn').disabled = true;
+
+                // Persist last used profile/region to preferences.json for restore on next app open
+                fetch('/api/preferences', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ last_profile: profile, last_region: region })
+                }).catch(err => console.error('Failed to save profile/region to preferences:', err));
             
                 await this.loadInstances();
                 this.showSuccess('Connected successfully');
@@ -329,6 +362,12 @@ const app = {
         this.updateAwsAccountDisplay();
         this.elements.connectBtn.innerHTML = '<i class="bi bi-plug"></i> Connect';
         this.elements.connectBtn.classList.replace('btn-danger', 'btn-success');
+
+        // Unlock dropdowns on disconnect
+        this.elements.profileSelect.disabled = false;
+        this.elements.regionSelect.disabled = false;
+        document.getElementById('refreshProfilesBtn').disabled = false;
+
         this.elements.instancesList.innerHTML = '';
         this.elements.connectionsList.innerHTML = '';
         this.updateCounters();
@@ -360,72 +399,207 @@ const app = {
         }
     },
 
-    // Render instances list
+    // Render instances list applying type filter, search filter and pagination
     renderInstances() {
         this.elements.instancesList.innerHTML = '';
-        
-        this.instances.forEach(instance => {
+
+        // 1. Type filter
+        const f = this.instanceFilter;
+        let filtered = this.instances.filter(i => {
+            if (!f || f === 'all') return true;
+            const os = (i.os || '').toLowerCase();
+            if (f === 'linux')   return os.includes('linux') || os.includes('unix');
+            if (f === 'windows') return os.includes('windows');
+            if (f === 'ssm')     return i.has_ssm;
+            if (f === 'active')  return this.connections.some(c => c.instanceId === i.id);
+            return true;
+        });
+
+        // 2. Search filter (instance ID)
+        if (this.instanceSearch) {
+            filtered = filtered.filter(i =>
+                i.id.toLowerCase().includes(this.instanceSearch)
+            );
+        }
+
+        // 3. Pagination
+        const PAGE_SIZE = 20;
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        if (this.currentPage > totalPages) this.currentPage = totalPages;
+        const start = (this.currentPage - 1) * PAGE_SIZE;
+        const paged  = filtered.slice(start, start + PAGE_SIZE);
+
+        paged.forEach(instance => {
             const card = this.createInstanceCard(instance);
             this.elements.instancesList.appendChild(card);
         });
+
+        // Restore expanded cards
+        this.expandedInstances.forEach(id => {
+            const body = document.getElementById(`iexpand-${id}`);
+            const chev = document.getElementById(`ichev-${id}`);
+            if (body) body.style.display = 'block';
+            if (chev) chev.className = 'bi bi-chevron-down instance-chevron';
+        });
+        this.renderConnections();
+        this.renderPagination(filtered.length, totalPages);
     },
 
-    // Create instance card
+    // Render pagination controls; hidden when total <= 20
+    renderPagination(total, totalPages) {
+        const container = document.getElementById('instancesPagination');
+        if (!container) return;
+        if (total <= 20) { container.innerHTML = ''; return; }
+
+        const cur = this.currentPage;
+        // Show up to 5 page buttons centred around current page
+        let ps = Math.max(1, cur - 2);
+        let pe = Math.min(totalPages, ps + 4);
+        if (pe - ps < 4) ps = Math.max(1, pe - 4);
+        const pages = Array.from({ length: pe - ps + 1 }, (_, i) => ps + i);
+
+        const from = (cur - 1) * 20 + 1;
+        const to   = Math.min(cur * 20, total);
+
+        container.innerHTML = `
+            <nav class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top px-1">
+                <small class="text-muted">${from}–${to} of ${total} instances</small>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item ${cur === 1 ? 'disabled' : ''}">
+                        <button class="page-link" onclick="app.setPage(${cur - 1})">&#8249;</button>
+                    </li>
+                    ${pages.map(p => `
+                        <li class="page-item ${p === cur ? 'active' : ''}">
+                            <button class="page-link" onclick="app.setPage(${p})">${p}</button>
+                        </li>`).join('')}
+                    <li class="page-item ${cur === totalPages ? 'disabled' : ''}">
+                        <button class="page-link" onclick="app.setPage(${cur + 1})">&#8250;</button>
+                    </li>
+                </ul>
+            </nav>`;
+    },
+
+    setPage(page) {
+        this.currentPage = page;
+        this.renderInstances();
+    },
+
+    onSearchInput(value) {
+        this.instanceSearch = value.trim().toLowerCase();
+        this.currentPage = 1;
+        const clearBtn = document.getElementById('instanceSearchClear');
+        if (clearBtn) clearBtn.style.display = this.instanceSearch ? '' : 'none';
+        this.renderInstances();
+    },
+
+    clearSearch() {
+        this.instanceSearch = '';
+        this.currentPage = 1;
+        const input = document.getElementById('instanceSearchInput');
+        if (input) input.value = '';
+        const clearBtn = document.getElementById('instanceSearchClear');
+        if (clearBtn) clearBtn.style.display = 'none';
+        this.renderInstances();
+    },
+
+    // Toggle instance filter; clicking the active filter resets it
+    setFilter(type) {
+        this.instanceFilter = (this.instanceFilter === type || type === 'all') ? null : type;
+        this.currentPage = 1;
+        const map = { linux: 'countLinuxBadge', windows: 'countWindowsBadge', ssm: 'countSsmBadge', active: 'countActiveBadge', all: 'instanceCount' };
+        Object.entries(map).forEach(([key, id]) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('ssm-counter-active', this.instanceFilter === key);
+        });
+        this.renderInstances();
+    },
+
+    // Create compact instance card with expandable detail section
     createInstanceCard(instance) {
         const card = document.createElement('div');
-        card.className = `col-md-12 ${instance.has_ssm ? '' : 'non-ssm'}`;
-        
+        card.id = `icard-${instance.id}`;
+
+        const os = (instance.os || '').toLowerCase();
+        const osClass = os.includes('windows') ? 'os-windows'
+                      : (os.includes('linux') || os.includes('unix')) ? 'os-linux'
+                      : '';
         const statusClass = instance.state === 'running' ? 'success' : 'danger';
-        
+        const ssmBadge = instance.has_ssm
+            ? '<span class="badge badge-fucsia status-badge">SSM</span>'
+            : '<span class="badge bg-secondary status-badge">No SSM</span>';
+
         card.innerHTML = `
-                <div class="card instance-card h-100">
-                    <div class="card-header d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <div class="mt-2"> 
-                                <ul class="list-unstyled">
-                                    <li><b>${instance.name}</b></li>
-                                    <li><small class="text-muted">${instance.id}</small></li>
-                                    <li>
-                                        <span class="badge bg-${statusClass} status-badge">${instance.state}</span>
-                                        <span class="badge bg-warning status-badge">${instance.type}</span>
-                                        <span class="badge bg-info status-badge">${instance.os}</span>
-                                        ${instance.has_ssm ? 
-                                            '<span class="badge badge-fucsia status-badge ms-1">SSM</span>' : 
-                                            '<span class="badge bg-secondary status-badge ms-1">SSM not found</span>'}
-                                    </li>
-                                <ul>
-                            </div>
+            <div class="instance-card card ${osClass} ${instance.has_ssm ? '' : 'non-ssm'}">
+                <div class="card-body py-2 px-3">
+                    <!-- Compact row: always visible -->
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-link p-0 text-muted instance-chevron-btn"
+                                onclick="app.toggleInstanceExpand('${instance.id}')"
+                                data-bs-toggle="tooltip" title="Expand / Collapse">
+                            <i class="bi bi-chevron-right instance-chevron" id="ichev-${instance.id}"></i>
+                        </button>
+                        <span class="fw-semibold flex-grow-1">${instance.name}</span>
+                        <!-- Connection indicator: populated by renderConnections -->
+                        <span id="iconn-ind-${instance.id}"></span>
+                        <div class="d-flex gap-1">
+                            ${instance.has_ssm ? `
+                                <button class="btn btn-sm btn-dark" onclick="app.startSSH('${instance.id}')">
+                                    <i class="bi bi-terminal"></i> SSH
+                                </button>
+                                <button class="btn btn-sm btn-primary" onclick="app.startRDP('${instance.id}')">
+                                    <i class="bi bi-display"></i> RDP
+                                </button>
+                                <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instance.id}')">
+                                    <i class="bi bi-arrow-left-right"></i> Port
+                                </button>
+                                ${!os.includes('windows') ? `
+                                <button class="btn btn-sm btn-success text-white"
+                                        data-instance-id="${instance.id}"
+                                        data-instance-name="${(instance.name || '').replace(/"/g, '&quot;')}"
+                                        onclick="app.openFileTransfer(this.dataset.instanceId, this.dataset.instanceName)"
+                                        data-bs-toggle="tooltip" title="File Transfer (SCP)">
+                                    <i class="bi bi-files"></i> File
+                                </button>` : ''}
+                            ` : ''}
+                            <button class="btn btn-sm btn-ottanio text-white" onclick="app.showInstanceDetails('${instance.id}')">
+                                <i class="bi bi-info-circle"></i> Info
+                            </button>
                         </div>
-                        <div>
-                            ${this.createActionButtons(instance.id)}
+                    </div>
+                    <!-- Expanded detail section: hidden by default -->
+                    <div class="instance-expand-body" id="iexpand-${instance.id}" style="display:none;">
+                        <div class="mt-2 ps-4 border-top pt-2">
+                            <small class="text-muted d-block mb-1">${instance.id}</small>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <span class="badge bg-${statusClass} status-badge">${instance.state}</span>
+                                <span class="badge bg-warning status-badge">${instance.type}</span>
+                                <span class="badge bg-info status-badge">${instance.os}</span>
+                                ${ssmBadge}
+                            </div>
+                            <!-- Active connections for this instance, populated by renderConnections -->
+                            <div id="iconns-${instance.id}"></div>
                         </div>
                     </div>
                 </div>
+            </div>
         `;
-        
+
         return card;
     },
 
-    // Create action buttons for instance
-    createActionButtons(instanceId) {
-        return `
-            <div class="d-flex justify-content-between mt-3 gap-2">
-                ${this.instances.find(i => i.id === instanceId).has_ssm ? `
-                    <button class="btn btn-sm btn-dark" onclick="app.startSSH('${instanceId}')">
-                        <i class="bi bi-terminal"></i> SSH
-                    </button>
-                    <button class="btn btn-sm btn-primary" onclick="app.startRDP('${instanceId}')">
-                        <i class="bi bi-display"></i> RDP
-                    </button>
-                    <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instanceId}')">
-                        <i class="bi bi-arrow-left-right"></i> Port
-                    </button>
-                ` : ''}
-                <button class="btn btn-sm btn-ottanio text-white" onclick="app.showInstanceDetails('${instanceId}')">
-                    <i class="bi bi-info-circle"></i> Info
-                </button>
-            </div>
-        `;
+    // Toggle expand/collapse of an instance card detail section
+    toggleInstanceExpand(instanceId) {
+        const body = document.getElementById(`iexpand-${instanceId}`);
+        const chev = document.getElementById(`ichev-${instanceId}`);
+        if (!body) return;
+        const expanding = body.style.display === 'none';
+        body.style.display = expanding ? 'block' : 'none';
+        if (chev) chev.className = expanding
+            ? 'bi bi-chevron-down instance-chevron'
+            : 'bi bi-chevron-right instance-chevron';
+        // Persist expanded state so refresh doesn't collapse cards
+        if (expanding) this.expandedInstances.add(instanceId);
+        else           this.expandedInstances.delete(instanceId);
     },
 
     // Utility functions
@@ -478,9 +652,27 @@ const app = {
         };
     },
 
+    /**
+     * Updates all counters in the UI: total, Linux, Windows, SSM-enabled instances
+     * and active connections. Reads from this.instances and this.connections arrays.
+     */
     updateCounters() {
-        this.elements.instanceCount.textContent = `${this.instances.length} instances`;
-        this.elements.connectionCount.textContent = `${this.connections.length} active`;
+        const total = this.instances.length;
+        const linux = this.instances.filter(i =>
+            i.os && (i.os.toLowerCase().includes('linux') || i.os.toLowerCase().includes('unix'))
+        ).length;
+        const windows = this.instances.filter(i =>
+            i.os && i.os.toLowerCase().includes('windows')
+        ).length;
+        const ssm = this.instances.filter(i => i.has_ssm).length;
+
+        document.getElementById('countTotal').textContent = total;
+        document.getElementById('countLinux').textContent = linux;
+        document.getElementById('countWindows').textContent = windows;
+        document.getElementById('countSsm').textContent = ssm;
+
+        const activeEl = document.getElementById('countActive');
+        if (activeEl) activeEl.textContent = this.connections.length;
     },
 
     // Connection Management Methods
@@ -591,6 +783,8 @@ const app = {
                             ${this.createDetailRow('Instance ID', details.id)}
                             ${this.createDetailRow('Name', details.name)}
                             ${this.createDetailRow('Platform', details.platform)}
+                            ${this.createDetailRow('Last Started', details.last_started)}
+                            ${this.createDetailRow('Created At', details.created_at)}
                             ${this.createDetailRow('Public IPv4', details.public_ip)}
                             ${this.createDetailRow('Private IPv4', details.private_ip)}
                             ${this.createDetailRow('VPC ID', details.vpc_id)}
@@ -826,7 +1020,7 @@ const app = {
     },
 
     generateConnectionId() {
-        return 'conn_' + Math.random().toString(36).substr(2, 9);
+        return 'conn_' + Math.random().toString(36).substring(2, 11);
     },
 
     // Connection monitoring
@@ -862,10 +1056,15 @@ const app = {
         } catch (error) {
             console.error('Error checking connections:', error);
         }
-    }
+    },
 
+    // Stubs declared here so the IDE type system recognises these properties;
+    // the real implementations are assigned below via app.xxx = function() after the literal.
+    showPreferences: async function() {},
+    savePreferences: async function() {},
+    loadPreferences: async function() {},
 
-    };
+};
 
     
 
@@ -873,13 +1072,10 @@ const app = {
 
     app.refreshData = async function() {
         if (!this.isConnected) return;
-    
+
         try {
             this.showLoading();
-    
-            // Reload profiles and regions first
-            await this.loadProfilesAndRegions();
-    
+
             // Reload instances
             const response = await fetch('/api/refresh', {
                 method: 'POST'
@@ -956,11 +1152,13 @@ const app = {
         console.log('Setting up event listeners...');
         this.elements.connectBtn.onclick = () => this.toggleConnection();
         this.elements.refreshBtn.onclick = () => this.refreshData();
-        
-        // Modifica la gestione dell'evento autoRefreshSwitch
+
+        // Auto refresh toggle
         this.elements.autoRefreshSwitch.onchange = (e) => {
             this.toggleAutoRefresh(e.target.checked);
         };
+
+        // Instance cards: chevron expand/collapse is handled via onclick in createInstanceCard
     };
     
     app.updateRefreshTimer = function() {
@@ -977,9 +1175,14 @@ const app = {
      * Applies or removes dark mode by toggling the data-bs-theme attribute on <html>.
      * @param {boolean} enabled - Whether dark mode should be active.
      */
+    /**
+     * Applies or removes dark mode by toggling the data-bs-theme attribute on <html>.
+     * @param {boolean} enabled
+     */
     app.applyDarkMode = function(enabled) {
         document.documentElement.setAttribute('data-bs-theme', enabled ? 'dark' : 'light');
     };
+
 
     app.showPreferences = async function() {
         console.log('Showing preferences dialog');
@@ -1017,7 +1220,6 @@ const app = {
             const endPort = parseInt(document.getElementById('endPort').value);
             const logLevel = document.getElementById('logLevel').value;
             const darkMode = document.getElementById('darkModeSwitch').checked;
-
             // Validate values
             if (startPort >= endPort) {
                 this.showError('Start port must be less than end port');
@@ -1050,7 +1252,7 @@ const app = {
 
             if (!response.ok) throw new Error('Failed to save preferences');
 
-            // Update local preferences and apply dark mode immediately
+            // Apply modes immediately and persist local copy
             this.preferences = newPreferences;
             this.applyDarkMode(darkMode);
 
@@ -1076,7 +1278,7 @@ const app = {
             this.preferences = await response.json();
             console.log('Loaded preferences:', this.preferences);
 
-            // Apply dark mode on startup based on saved preference
+            // Apply dark mode and compact mode on startup based on saved preferences
             this.applyDarkMode(this.preferences.dark_mode === true);
 
         } catch (error) {
@@ -1193,63 +1395,81 @@ const app = {
         }
     };
     
-    // Modifica la funzione renderConnections per gestire meglio le informazioni di connessione
+    // Render connections inline inside each expanded instance card
     app.renderConnections = function() {
-        const container = this.elements.connectionsList;
-        container.innerHTML = '';
-    
-        if (this.connections.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted p-4">
-                    <i class="bi bi-diagram-2 fs-2"></i>
-                    <p class="mt-2">No active connections</p>
-                </div>
-            `;
-            return;
-        }
-    
-        this.connections.forEach(conn => {
-            const element = document.createElement('div');
-            element.className = 'connection-item';
-            
-            // Format timestamp
-            const timestamp = new Date(conn.timestamp).toLocaleTimeString();
-            
-            // Create connection info based on type
-            let connectionInfo = '';
-            if (conn.type === 'RDP' || conn.type === 'Custom Port' || conn.type === 'Remote Host Port') {
-                connectionInfo = `
-                    <div class="text-muted small">
-                        Local Port: ${conn.localPort}
-                        ${conn.remotePort ? `, Remote Port: ${conn.remotePort}` : ''}
-                        ${conn.remoteHost ? `, Host: ${conn.remoteHost}` : ''}
+        // Update active connections counter in the instances header
+        const countActive = document.getElementById('countActive');
+        if (countActive) countActive.textContent = this.connections.length;
+
+        // Update per-instance connection indicator icon in the compact row
+        this.instances.forEach(inst => {
+            const indEl = document.getElementById(`iconn-ind-${inst.id}`);
+            if (indEl) {
+                const count = this.connections.filter(c => c.instanceId === inst.id).length;
+                if (count > 0) {
+                    indEl.innerHTML = `<span class="instance-conn-indicator" data-bs-toggle="tooltip" title="${count} active connection${count > 1 ? 's' : ''}">
+                        <i class="bi bi-activity"></i>${count > 1 ? `<span class="conn-count">${count}</span>` : ''}
+                    </span>`;
+                } else {
+                    indEl.innerHTML = '';
+                }
+            }
+        });
+
+        this.instances.forEach(inst => {
+            const el = document.getElementById(`iconns-${inst.id}`);
+            if (!el) return;
+
+            const conns = this.connections.filter(c => c.instanceId === inst.id);
+            if (conns.length === 0) { el.innerHTML = ''; return; }
+
+            const header = `
+                <div class="d-flex align-items-center gap-1 mt-2 mb-1">
+                    <i class="bi bi-activity" style="font-size:0.75rem;color:var(--ssm-accent)"></i>
+                    <small class="fw-semibold text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em">Active connections</small>
+                </div>`;
+
+            el.innerHTML = header + conns.map(conn => {
+                const ts    = new Date(conn.timestamp).toLocaleTimeString();
+                const color = this.getConnectionTypeColor(conn.type);
+                const badgeClass = color.startsWith('#') ? 'badge' : `badge bg-${color}`;
+                const badgeStyle = color.startsWith('#') ? `background-color:${color};color:#fff` : '';
+
+                // Port info: local port + remote port + optional clickable link
+                let portInfo = '';
+                if (conn.localPort) {
+                    portInfo = `<span class="text-muted ms-1">local&nbsp;${conn.localPort}`;
+                    if (conn.remotePort) portInfo += `&nbsp;·&nbsp;remote&nbsp;${conn.remotePort}`;
+                    portInfo += `</span>`;
+
+                    // Clickable localhost link for Custom Port / Remote Host Port only
+                    if (conn.type === 'Custom Port' || conn.type === 'Remote Host Port') {
+                        const proto = (conn.remotePort === 443 || conn.remotePort === '443') ? 'https' : 'http';
+                        portInfo += `&nbsp;<a href="${proto}://localhost:${conn.localPort}"
+                                           target="_blank"
+                                           class="conn-link"
+                                           onclick="event.stopPropagation()">
+                                            <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem"></i>&nbsp;localhost:${conn.localPort}
+                                         </a>`;
+                    }
+                }
+
+                return `
+                    <div class="instance-conn-item d-flex align-items-center justify-content-between mt-1">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="${badgeClass}" style="${badgeStyle}">${conn.type}</span>
+                            <small class="text-muted d-flex align-items-center gap-1">
+                                <i class="bi bi-clock" style="font-size:0.7rem"></i>${ts}
+                            </small>
+                            ${portInfo}
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1 ms-1 flex-shrink-0"
+                                onclick="app.terminateConnection('${conn.id}')">
+                            <i class="bi bi-x-lg" style="font-size:0.7rem"></i>
+                        </button>
                     </div>
                 `;
-            }
-    
-            element.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge 
-                                ${this.getConnectionTypeColor(conn.type) === 'dark' ? 'bg-dark' : ''} 
-                                ${this.getConnectionTypeColor(conn.type) === 'primary' ? 'bg-primary' : ''}" 
-                                style="${this.getConnectionTypeColor(conn.type) === '#800080' ? `background-color: #800080;` : ''}">
-                                ${conn.type}
-                            </span>
-                        </div>
-                        <div class="text-muted small"><b>ID: ${this.getInstanceName(conn.instanceId)}</b></div>
-                        ${connectionInfo}
-                        <div class="text-muted small">Started at ${timestamp}</div>
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" 
-                            onclick="app.terminateConnection('${conn.id}')">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-            `;
-            
-            container.appendChild(element);
+            }).join('');
         });
     };
     
@@ -1304,8 +1524,25 @@ const app = {
         }
     },
 
+    /**
+     * Shows the About modal and fetches the current app version from the backend.
+     * Version is loaded on every open to always reflect the running build.
+     */
     app.showAbout = function() {
         if (this.modals.about) {
+            // Fetch version from backend and update the version label before showing
+            fetch('/api/version')
+                .then(response => response.json())
+                .then(data => {
+                    const el = document.getElementById('aboutVersion');
+                    if (el) {
+                        el.textContent = `Version ${data.version}`;
+                    }
+                })
+                .catch(() => {
+                    const el = document.getElementById('aboutVersion');
+                    if (el) el.textContent = 'Version unknown';
+                });
             this.modals.about.show();
         } else {
             console.error('About modal not initialized');
@@ -1336,6 +1573,270 @@ const app = {
     };
    
     
+
+// ---------------------------------------------------------------------------
+// File Transfer methods
+// ---------------------------------------------------------------------------
+
+/**
+ * Opens the File Transfer modal for the given instance.
+ * Checks SCP availability and shows an installation guide if missing.
+ * @param {string} instanceId
+ * @param {string} instanceName
+ */
+app.openFileTransfer = async function(instanceId, instanceName) {
+    this.currentTransferInstanceId = instanceId;
+    this.currentTransferInstanceName = instanceName;
+
+    // Reset modal to clean state before showing
+    this.resetTransferModal();
+    document.getElementById('ftInstanceName').textContent = instanceName || instanceId;
+
+    if (this.modals.fileTransfer) {
+        this.modals.fileTransfer.show();
+    }
+
+    // Check SCP availability asynchronously after the modal is visible
+    try {
+        const res  = await fetch('/api/check-scp');
+        const data = await res.json();
+        document.getElementById('ftScpWarning').style.display = data.available ? 'none' : 'block';
+        document.getElementById('ftTransferBtn').disabled = !data.available;
+    } catch (e) {
+        console.error('SCP check failed:', e);
+    }
+};
+
+/**
+ * Switches the transfer direction between 'upload' and 'download',
+ * toggling button styles and showing the relevant form fields.
+ * @param {'upload'|'download'} direction
+ */
+app.setTransferDirection = function(direction) {
+    this.transferDirection = direction;
+    const uploadBtn     = document.getElementById('ftBtnUpload');
+    const downloadBtn   = document.getElementById('ftBtnDownload');
+    const uploadFields  = document.getElementById('ftUploadFields');
+    const downloadFields = document.getElementById('ftDownloadFields');
+
+    if (direction === 'upload') {
+        uploadBtn.className   = 'btn btn-primary flex-fill ft-dir-btn';
+        downloadBtn.className = 'btn btn-outline-secondary flex-fill ft-dir-btn';
+        uploadFields.style.display  = 'block';
+        downloadFields.style.display = 'none';
+    } else {
+        downloadBtn.className = 'btn btn-primary flex-fill ft-dir-btn';
+        uploadBtn.className   = 'btn btn-outline-secondary flex-fill ft-dir-btn';
+        downloadFields.style.display = 'block';
+        uploadFields.style.display  = 'none';
+    }
+
+    // Reset progress UI when switching direction so a previous completed/failed
+    // transfer does not leave the button in a "Done" or disabled state.
+    this._resetTransferProgressUI();
+};
+
+/**
+ * Opens a native file or folder dialog (via the Flask /api/file-dialog route
+ * which delegates to pywebview) and puts the selected path into an input field.
+ * @param {string} inputId - ID of the <input> to populate.
+ * @param {'open'|'folder'} type - Dialog type.
+ */
+app.browseFile = async function(inputId, type) {
+    try {
+        const res  = await fetch('/api/file-dialog', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type }),
+        });
+        const data = await res.json();
+        if (data.path) {
+            document.getElementById(inputId).value = data.path;
+        }
+    } catch (e) {
+        console.error('File dialog error:', e);
+    }
+};
+
+/**
+ * Validates the form, sends the transfer request to the backend,
+ * and starts polling for progress.
+ */
+app.startTransfer = async function() {
+    const instanceId = this.currentTransferInstanceId;
+    if (!instanceId) return;
+
+    const direction  = this.transferDirection;
+    const remoteUser = (document.getElementById('ftRemoteUser').value || '').trim();
+    const keyPath    = (document.getElementById('ftKeyPath').value || '').trim();
+
+    let localPath, remotePath;
+    if (direction === 'upload') {
+        localPath  = (document.getElementById('ftLocalFile').value || '').trim();
+        remotePath = (document.getElementById('ftRemoteDestPath').value || '').trim();
+    } else {
+        remotePath = (document.getElementById('ftRemoteFilePath').value || '').trim();
+        localPath  = (document.getElementById('ftLocalDestFolder').value || '').trim();
+    }
+
+    if (!remoteUser || !localPath || !remotePath) {
+        this.showError('Please fill in all required fields.');
+        return;
+    }
+
+    // Reveal progress section and lock the form for the duration of the transfer
+    const pbEl = document.getElementById('ftProgressBar');
+    pbEl.style.width = '0%';
+    pbEl.textContent = '0%';
+    pbEl.className = 'progress-bar progress-bar-striped progress-bar-animated bg-primary';
+
+    document.getElementById('ftProgress').style.display = 'block';
+    document.getElementById('ftTransferBtn').style.display = 'none';
+    document.getElementById('ftCancelBtn').style.display = 'inline-block';
+    document.getElementById('ftProgressMsg').textContent = 'Starting…';
+    document.getElementById('ftProgressSpeed').textContent = '';
+    document.getElementById('ftProgressEta').textContent = '';
+    document.getElementById('ftProgressFile').textContent =
+        direction === 'upload'
+            ? localPath.split(/[\\/]/).pop()
+            : remotePath.split('/').pop();
+
+    try {
+        const res  = await fetch(`/api/transfer/${instanceId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                direction,
+                remote_user: remoteUser,
+                key_path:    keyPath,
+                local_path:  localPath,
+                remote_path: remotePath,
+                profile:     this.currentProfile,
+                region:      this.currentRegion,
+            }),
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'Failed to start transfer');
+
+        this.activeTransferId = data.transfer_id;
+        this.pollTransferProgress();
+    } catch (e) {
+        this.showError('Transfer error: ' + e.message);
+        this._resetTransferProgressUI();
+    }
+};
+
+/**
+ * Polls /api/transfer-progress every 500 ms and updates the progress bar.
+ * Stops automatically when status is 'completed', 'error', or 'cancelled'.
+ */
+app.pollTransferProgress = function() {
+    if (this.transferPollTimer) clearTimeout(this.transferPollTimer);
+
+    const poll = async () => {
+        if (!this.activeTransferId) return;
+        try {
+            const res  = await fetch(`/api/transfer-progress/${this.activeTransferId}`);
+            const data = await res.json();
+
+            const pbEl = document.getElementById('ftProgressBar');
+            const pct  = data.progress || 0;
+            pbEl.style.width = `${pct}%`;
+            pbEl.textContent = `${pct}%`;
+            document.getElementById('ftProgressMsg').textContent   = data.message || '';
+            document.getElementById('ftProgressSpeed').textContent = data.speed   || '';
+            document.getElementById('ftProgressEta').textContent   = data.eta ? `ETA ${data.eta}` : '';
+
+            if (data.status === 'completed') {
+                pbEl.className = 'progress-bar bg-success';
+                pbEl.style.width = '100%';
+                pbEl.textContent = '100%';
+                document.getElementById('ftCancelBtn').style.display = 'none';
+                const transferBtn = document.getElementById('ftTransferBtn');
+                transferBtn.style.display = 'inline-block';
+                transferBtn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Done';
+                transferBtn.disabled = true;
+                this.showSuccess('File transfer completed successfully!');
+                this.activeTransferId = null;
+                return;
+            }
+
+            if (data.status === 'error') {
+                pbEl.className = 'progress-bar bg-danger';
+                document.getElementById('ftProgressMsg').textContent = data.message || 'Transfer failed.';
+                this.showError('Transfer failed: ' + data.message);
+                this._resetTransferProgressUI();
+                this.activeTransferId = null;
+                return;
+            }
+
+            if (data.status === 'cancelled') {
+                this.activeTransferId = null;
+                return;
+            }
+
+            // Still in progress — schedule next poll
+            this.transferPollTimer = setTimeout(poll, 500);
+        } catch (e) {
+            console.error('Progress poll error:', e);
+            this.transferPollTimer = setTimeout(poll, 1000);
+        }
+    };
+
+    poll();
+};
+
+/**
+ * Cancels the active transfer (if any) by calling DELETE /api/transfer/<id>.
+ */
+app.cancelTransfer = async function() {
+    if (!this.activeTransferId) return;
+    if (this.transferPollTimer) clearTimeout(this.transferPollTimer);
+    try {
+        await fetch(`/api/transfer/${this.activeTransferId}`, { method: 'DELETE' });
+    } catch (e) { /* best-effort */ }
+    this.activeTransferId = null;
+    this._resetTransferProgressUI();
+};
+
+/**
+ * Resets all modal inputs and state to their initial values.
+ * Called when the modal opens (fresh start) or is dismissed.
+ */
+app.resetTransferModal = function() {
+    this.transferDirection = 'upload';
+    if (this.transferPollTimer) clearTimeout(this.transferPollTimer);
+
+    // Direction buttons — reset to Upload selected
+    document.getElementById('ftBtnUpload').className   = 'btn btn-primary flex-fill ft-dir-btn';
+    document.getElementById('ftBtnDownload').className = 'btn btn-outline-secondary flex-fill ft-dir-btn';
+    document.getElementById('ftUploadFields').style.display  = 'block';
+    document.getElementById('ftDownloadFields').style.display = 'none';
+
+    // Clear all path inputs; keep remote user default
+    ['ftLocalFile', 'ftRemoteDestPath', 'ftRemoteFilePath', 'ftLocalDestFolder', 'ftKeyPath']
+        .forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+    document.getElementById('ftRemoteUser').value = 'ec2-user';
+    document.getElementById('ftScpWarning').style.display = 'none';
+
+    this._resetTransferProgressUI();
+};
+
+/**
+ * Resets only the progress section and the Transfer/Cancel buttons.
+ * @private
+ */
+app._resetTransferProgressUI = function() {
+    document.getElementById('ftProgress').style.display = 'none';
+    const btn = document.getElementById('ftTransferBtn');
+    btn.style.display = 'inline-block';
+    btn.innerHTML = '<i class="bi bi-send me-1"></i>Transfer';
+    btn.disabled = false;
+    document.getElementById('ftCancelBtn').style.display = 'none';
+};
 
 // Initialize app when document is ready
 document.addEventListener('DOMContentLoaded', () => app.init());

@@ -1,5 +1,6 @@
 from flask import jsonify, request, render_template
 from app import app, aws_manager, active_connections
+from version import __version__
 import subprocess
 import random
 import socket
@@ -7,18 +8,33 @@ import time
 from subprocess import STARTUPINFO, STARTF_USESHOWWINDOW, CREATE_NEW_CONSOLE, SW_HIDE
 import tempfile
 import os
+import re
+import shutil
 import logging
 from preferences_handler import PreferencesHandler
 import threading
 import psutil
-import tempfile
+import webview
 
 
 # Create preferences handler instance
 preferences_handler = PreferencesHandler()
-#logger = logging.getLogger(__name__)
 
 active_connections = []
+
+# Dict tracking in-progress file transfers: transfer_id -> state dict.
+# Internal keys prefixed with '_' are not sent to the client.
+active_transfers = {}
+
+@app.route('/api/version')
+def get_version():
+    """Return the application version from version.py.
+
+    Returns:
+        JSON with key 'version' (str), e.g. {"version": "1.31"}.
+    """
+    return jsonify({'version': __version__})
+
 
 @app.route('/api/profiles')
 def get_profiles():
@@ -125,7 +141,9 @@ def start_ssh(instance_id):
         
         # Crea il comando AWS SSM e avvia il processo
         cmd_command = f'aws ssm start-session --target {instance_id} --region {region} --profile {profile}'
-        process = subprocess.Popen(f'start cmd /k "{cmd_command}"', shell=True)
+        # /c closes cmd.exe automatically when aws ssm start-session exits,
+        # so the connection is detected as terminated as soon as the SSH session ends.
+        process = subprocess.Popen(f'start cmd /c "{cmd_command}"', shell=True)
         
         def find_cmd_pid():
             time.sleep(2)  # Wait for process to start
@@ -651,7 +669,320 @@ def set_log_level():
         return jsonify({'error': str(e)}), 500
     
     
+# ---------------------------------------------------------------------------
+# File Transfer (SCP over SSM SSH tunnel)
+# ---------------------------------------------------------------------------
+
+@app.route('/api/check-scp')
+def check_scp():
+    """Check whether the 'scp' executable is available on this machine.
+
+    Returns:
+        JSON with key 'available' (bool).
+    """
+    available = shutil.which('scp') is not None
+    return jsonify({'available': available})
+
+
+@app.route('/api/file-dialog', methods=['POST'])
+def open_file_dialog():
+    """Open a native file or folder selection dialog via pywebview.
+
+    Request body (JSON):
+        type (str): 'open' for a single file, 'folder' for a directory.
+
+    Returns:
+        JSON with key 'path' (str or None if cancelled).
+    """
+    try:
+        data = request.json or {}
+        dialog_type_str = data.get('type', 'open')
+
+        # webview.windows[0] is the single app window; create_file_dialog is
+        # thread-safe in pywebview 6.x and blocks until the user selects.
+        window = webview.windows[0]
+        if dialog_type_str == 'folder':
+            result = window.create_file_dialog(webview.FOLDER_DIALOG)
+        else:
+            result = window.create_file_dialog(
+                webview.OPEN_DIALOG,
+                allow_multiple=False,
+            )
+
+        if result:
+            return jsonify({'path': result[0]})
+        return jsonify({'path': None})
+
+    except Exception as e:
+        logging.error(f"File dialog error: {e}")
+        return jsonify({'path': None, 'error': str(e)})
+
+
+@app.route('/api/transfer/<instance_id>', methods=['POST'])
+def start_transfer(instance_id: str):
+    """Start an SCP file transfer to/from an EC2 instance via an SSM SSH tunnel.
+
+    Flow:
+        1. Allocate a free local port and open an SSM port-forward to port 22.
+        2. Wait up to 15 s for the tunnel port to become reachable.
+        3. Run SCP against 127.0.0.1:<local_port>, capturing stdout/stderr for
+           progress updates parsed via regex.
+        4. Kill the tunnel once SCP exits.
+
+    Request body (JSON):
+        direction (str): 'upload' or 'download'.
+        remote_user (str): SSH username on the remote instance (e.g. 'ec2-user').
+        key_path (str): Optional path to an SSH private key (.pem).
+        local_path (str): Local file path for upload source, or local destination
+                          directory for download.
+        remote_path (str): Remote destination directory for upload, or remote
+                           source file path for download.
+        profile (str): AWS CLI profile name.
+        region (str): AWS region string.
+
+    Returns:
+        JSON with 'transfer_id' on success.
+    """
+    try:
+        data = request.json
+        direction   = (data.get('direction') or '').strip()
+        remote_user = (data.get('remote_user') or 'ec2-user').strip()
+        key_path    = (data.get('key_path') or '').strip()
+        local_path  = (data.get('local_path') or '').strip()
+        remote_path = (data.get('remote_path') or '').strip()
+        profile     = data.get('profile')
+        region      = data.get('region')
+
+        if not direction or not remote_user or not local_path or not remote_path:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        transfer_id = f"transfer_{instance_id}_{int(time.time())}"
+        filename = os.path.basename(
+            local_path if direction == 'upload' else remote_path
+        )
+
+        active_transfers[transfer_id] = {
+            'progress': 0,
+            'status': 'starting',
+            'message': 'Setting up SSH tunnel…',
+            'filename': filename,
+            'speed': '',
+            'eta': '',
+            '_tunnel_process': None,  # not sent to client
+            '_cancelled': False,      # set by DELETE /api/transfer/<id>
+        }
+
+        def run_transfer():
+            """Background thread: tunnel → SCP → cleanup."""
+            tunnel_proc = None
+            try:
+                # --- Step 1: start SSM port-forward to port 22 ---
+                local_port = find_free_port()
+                if not local_port:
+                    active_transfers[transfer_id].update({
+                        'status': 'error',
+                        'message': 'No free port available for SSH tunnel.',
+                    })
+                    return
+
+                aws_cmd = (
+                    f"aws ssm start-session --target {instance_id} "
+                    f"--document-name AWS-StartPortForwardingSession "
+                    f"--parameters portNumber=22,localPortNumber={local_port} "
+                    f"--region {region} --profile {profile}"
+                )
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+                startupinfo.wShowWindow = subprocess.SW_HIDE
+
+                tunnel_proc = subprocess.Popen(
+                    ["powershell", "-Command", aws_cmd],
+                    startupinfo=startupinfo,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                active_transfers[transfer_id]['_tunnel_process'] = tunnel_proc
+
+                # --- Step 2: wait for the tunnel port to become reachable ---
+                active_transfers[transfer_id]['message'] = 'Waiting for SSH tunnel…'
+                tunnel_ready = False
+                for _ in range(15):
+                    if active_transfers[transfer_id].get('_cancelled'):
+                        return
+                    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    try:
+                        if s.connect_ex(('127.0.0.1', local_port)) == 0:
+                            tunnel_ready = True
+                            break
+                    finally:
+                        s.close()
+                    time.sleep(1)
+
+                if not tunnel_ready:
+                    active_transfers[transfer_id].update({
+                        'status': 'error',
+                        'message': 'SSH tunnel did not become ready. Check SSM connectivity and that SSH (port 22) is open on the instance.',
+                    })
+                    return
+
+                if active_transfers[transfer_id].get('_cancelled'):
+                    return
+
+                # --- Step 3: build SCP command ---
+                scp_cmd = [
+                    'scp',
+                    '-P', str(local_port),
+                    '-o', 'StrictHostKeyChecking=no',
+                    '-o', 'UserKnownHostsFile=/dev/null',
+                ]
+                if key_path:
+                    scp_cmd += ['-i', key_path]
+
+                if direction == 'upload':
+                    scp_cmd += [local_path, f'{remote_user}@127.0.0.1:{remote_path}']
+                else:
+                    scp_cmd += [f'{remote_user}@127.0.0.1:{remote_path}', local_path]
+
+                active_transfers[transfer_id].update({
+                    'status': 'running',
+                    'message': 'Transferring…',
+                    'progress': 0,
+                })
+
+                # --- Step 4: run SCP, parse progress from merged stdout+stderr ---
+                scp_proc = subprocess.Popen(
+                    scp_cmd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,  # merge stderr so we capture progress
+                    startupinfo=startupinfo,
+                    encoding='utf-8',
+                    errors='replace',
+                )
+
+                # SCP writes progress using \r to overwrite the same terminal line.
+                # When piped, each \r-terminated chunk is a progress update.
+                buf = ''
+                while True:
+                    if active_transfers[transfer_id].get('_cancelled'):
+                        scp_proc.terminate()
+                        return
+                    chunk = scp_proc.stdout.read(256)
+                    if not chunk:
+                        break
+                    buf += chunk
+                    # Split on both \r and \n to capture each progress line
+                    parts = re.split(r'[\r\n]', buf)
+                    buf = parts[-1]  # keep partial last line for next iteration
+                    for line in parts[:-1]:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        # SCP progress format: "filename  45%  512KB  1.0MB/s  0:01 ETA"
+                        m = re.search(
+                            r'(\d+)%\s+([\d.]+\s*\S+)\s+([\d.]+\s*\S+/s)\s*([\d:]+)?\s*(ETA)?',
+                            line
+                        )
+                        if m:
+                            pct   = int(m.group(1))
+                            speed = (m.group(3) or '').strip()
+                            eta   = (m.group(4) or '').strip()
+                            active_transfers[transfer_id].update({
+                                'progress': pct,
+                                'speed': speed,
+                                'eta': eta,
+                                'message': f'Transferring… {pct}%',
+                            })
+
+                scp_proc.wait()
+
+                if active_transfers[transfer_id].get('_cancelled'):
+                    return
+
+                if scp_proc.returncode == 0:
+                    active_transfers[transfer_id].update({
+                        'status': 'completed',
+                        'progress': 100,
+                        'message': 'Transfer completed successfully!',
+                        'speed': '',
+                        'eta': '',
+                    })
+                else:
+                    active_transfers[transfer_id].update({
+                        'status': 'error',
+                        'message': (
+                            f'SCP exited with code {scp_proc.returncode}. '
+                            'Check SSH key, username, and remote path.'
+                        ),
+                    })
+
+            except Exception as exc:
+                logging.error(f"File transfer error [{transfer_id}]: {exc}")
+                active_transfers[transfer_id].update({
+                    'status': 'error',
+                    'message': str(exc),
+                })
+            finally:
+                if tunnel_proc:
+                    try:
+                        tunnel_proc.terminate()
+                    except Exception:
+                        pass
+                if transfer_id in active_transfers:
+                    active_transfers[transfer_id]['_tunnel_process'] = None
+
+        threading.Thread(target=run_transfer, daemon=True).start()
+        return jsonify({'status': 'success', 'transfer_id': transfer_id})
+
+    except Exception as e:
+        logging.error(f"Error starting transfer: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/transfer-progress/<transfer_id>')
+def get_transfer_progress(transfer_id: str):
+    """Return the current progress of a file transfer.
+
+    Returns:
+        JSON with progress (int 0-100), status, message, filename, speed, eta.
+    """
+    t = active_transfers.get(transfer_id)
+    if not t:
+        return jsonify({'error': 'Transfer not found'}), 404
+    return jsonify({
+        'progress': t['progress'],
+        'status':   t['status'],
+        'message':  t['message'],
+        'filename': t.get('filename', ''),
+        'speed':    t.get('speed', ''),
+        'eta':      t.get('eta', ''),
+    })
+
+
+@app.route('/api/transfer/<transfer_id>', methods=['DELETE'])
+def cancel_transfer(transfer_id: str):
+    """Cancel an in-progress file transfer.
+
+    Sets the _cancelled flag (checked by the background thread) and terminates
+    the SSM tunnel process immediately.
+    """
+    t = active_transfers.get(transfer_id)
+    if t:
+        t['_cancelled'] = True
+        t['status']  = 'cancelled'
+        t['message'] = 'Transfer cancelled.'
+        proc = t.get('_tunnel_process')
+        if proc:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+    return jsonify({'status': 'success'})
+
+
+# ---------------------------------------------------------------------------
 # Utility functions
+# ---------------------------------------------------------------------------
+
 # Update this function in routes.py
 def find_free_port():
     """Find a free port using the configured range"""

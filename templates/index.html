@@ -5,8 +5,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>SSM Manager</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.1/font/bootstrap-icons.css" rel="stylesheet">
     <style>
         .instance-card {
             transition: all 0.3s ease;
@@ -31,14 +31,23 @@
 
 
             <div class="col">
-                <div class="card shadow-sm">
-                    <div class="card-body">
+                <div class="card ssm-header">
+                    <div class="card-body py-3">
                         <div class="row g-3 align-items-center">
-                            <!--
+
+                            <!-- Brand -->
                             <div class="col-auto">
-                            <img src="{{ url_for('static', filename='/images/logo.png') }}" alt="SSM Manager Logo" class="h-100" style="width: auto; min-height: 90px; max-width: 90px;">
+                                <div class="ssm-brand">
+                                    <i class="bi bi-hdd-network-fill"></i>
+                                    SSM Manager
+                                </div>
                             </div>
-                            -->
+
+                            <div class="col-auto">
+                                <div class="ssm-divider"></div>
+                            </div>
+
+                            <!-- Profile -->
                             <div class="col-auto">
                                 <select id="profileSelect" class="form-select">
                                     <option value="">Select Profile</option>
@@ -46,63 +55,40 @@
                             </div>
                             <div class="col-auto">
                                 <button id="refreshProfilesBtn" class="btn btn-outline-secondary"
-                                    title="Refresh Profiles">
-                                    <i class="bi bi-arrow-clockwise"></i>
+                                    data-bs-toggle="tooltip" title="Refresh Profiles">
+                                    <i class="bi bi-person-fill"></i><i class="bi bi-arrow-clockwise"></i>
+                                    Profiles
                                 </button>
                             </div>
 
-
+                            <!-- Region -->
                             <div class="col-auto">
                                 <select id="regionSelect" class="form-select">
                                     <option value="">Select Region</option>
                                 </select>
                             </div>
 
+                            <!-- Connect -->
                             <div class="col-auto">
-                                <button id="connectBtn" class="btn btn-success">
+                                <button id="connectBtn" class="btn btn-success px-4">
                                     <i class="bi bi-plug fs-5"></i> Connect
                                 </button>
                             </div>
 
-                            <div class="col-auto">
-                                <button id="refreshBtn"
-                                    class="btn btn-outline-secondary d-flex align-items-center justify-content-between">
-                                    <!-- Refresh sx -->
-                                    <i class="bi bi-arrow-clockwise fs-5 me-2" data-bs-toggle="tooltip"
-                                        title="Refresh"></i>
-
-                                    <!-- Switch auto-refresh dx -->
-                                    <div class="form-check form-switch m-1">
-                                        <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
-                                        <label class="form-check-label" for="autoRefreshSwitch">Auto Refresh</label>
-                                    </div>
-                                    <div class="col-auto">
-                                        <span id="refreshTimer" class="badge bg-primary"></span>
-                                    </div>
-                                </button>
-                            </div>
-                            <!--
-                            <div class="col-auto">
-                                <div class="form-check form-switch">
-                                    <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
-                                    <label class="form-check-label" for="autoRefreshSwitch">Auto Refresh</label>
-                                </div>
-                            </div>
-                            
-                            <div class="col-auto">
-                                <span id="refreshTimer" class="badge bg-secondary"></span>
-                            </div>
-                            -->
+                            <!-- Right-side actions -->
                             <div class="col-auto ms-auto">
-                                <button class="btn btn-outline-secondary" id="preferencesBtn">
-                                    <i class="bi bi-gear-fill fs-5" data-bs-toggle="tooltip" title="Setting"></i>
-                                    Settings
+                                <div class="ssm-divider"></div>
+                            </div>
+                            <div class="col-auto">
+                                <button class="btn btn-outline-secondary ssm-icon-btn" id="preferencesBtn"
+                                    data-bs-toggle="tooltip" title="Settings">
+                                    <i class="bi bi-gear-fill"></i>
                                 </button>
                             </div>
                             <div class="col-auto">
-                                <button class="btn btn-outline-secondary" id="aboutBtn">
-                                    <i class="bi bi-info-circle-fill fs-5" data-bs-toggle="tooltip" title="About"></i>
-                                    About
+                                <button class="btn btn-outline-secondary ssm-icon-btn" id="aboutBtn"
+                                    data-bs-toggle="tooltip" title="About">
+                                    <i class="bi bi-info-circle-fill"></i>
                                 </button>
                             </div>
                         </div>
@@ -112,40 +98,67 @@
         </div>
 
         <!-- Main Content -->
-        <div class="row">
-            <!-- Instances Section - Now 8 columns -->
-            <div class="col-md-8">
-                <div class="card shadow-sm mb-4 mb-md-0">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <h5 class="m-0">Instances </h5>
-                            <h5 class="m-0" id="accountIdContainer" style="display: none;">
-                                - AWS ID: <span id="awsAccountId"></span>
-                            </h5>
-                        </div>
-                        <span class="badge bg-primary" id="instanceCount">0 instances</span>
-                    </div>
-                    <div class="card-body">
-                        <div id="instancesList" class="row g-4">
-                            <!-- Instances will be loaded here -->
-                        </div>
-                    </div>
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 gap-3">
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <h5 class="m-0">Instances</h5>
+                    <h5 class="m-0" id="accountIdContainer" style="display: none;">
+                        - Account: <span id="awsAccountId"></span>
+                    </h5>
+                </div>
+                <!-- Search by instance ID -->
+                <div class="input-group input-group-sm ssm-search-group" style="max-width:260px">
+                    <span class="input-group-text border-end-0">
+                        <i class="bi bi-search text-muted" style="font-size:0.8rem"></i>
+                    </span>
+                    <input type="text" class="form-control border-start-0 ps-0"
+                           id="instanceSearchInput"
+                           placeholder="Filter by instance ID…"
+                           oninput="app.onSearchInput(this.value)">
+                    <button class="btn btn-outline-secondary" id="instanceSearchClear" style="display:none"
+                            onclick="app.clearSearch()">
+                        <i class="bi bi-x" style="font-size:0.8rem"></i>
+                    </button>
+                </div>
+                <div class="d-flex align-items-stretch gap-2">
+                    <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="instanceCount"
+                        data-bs-toggle="tooltip" title="Total instances" onclick="app.setFilter('all')">
+                        <i class="bi bi-stack"></i>
+                        <span id="countTotal">0</span>
+                    </span>
+                    <span class="badge bg-dark d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countLinuxBadge"
+                        data-bs-toggle="tooltip" title="Linux instances" onclick="app.setFilter('linux')">
+                        <i class="bi bi-terminal"></i>
+                        <span id="countLinux">0</span>
+                    </span>
+                    <span class="badge bg-primary d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countWindowsBadge"
+                        data-bs-toggle="tooltip" title="Windows instances" onclick="app.setFilter('windows')">
+                        <i class="bi bi-windows"></i>
+                        <span id="countWindows">0</span>
+                    </span>
+                    <span class="badge badge-fucsia d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countSsmBadge"
+                        data-bs-toggle="tooltip" title="SSM-enabled instances" onclick="app.setFilter('ssm')">
+                        <i class="bi bi-shield-check"></i>
+                        <span id="countSsm">0</span>
+                    </span>
+                    <span class="badge bg-warning text-dark d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countActiveBadge"
+                        data-bs-toggle="tooltip" title="Active connections" onclick="app.setFilter('active')">
+                        <i class="bi bi-activity"></i>
+                        <span id="countActive">0</span>
+                    </span>
+                    <button id="refreshBtn"
+                        class="btn btn-outline-secondary d-flex align-items-center gap-1 fs-6 px-2 py-0"
+                        data-bs-toggle="tooltip" title="Refresh instances">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        <span id="refreshTimer" class="ssm-timer-text"></span>
+                    </button>
                 </div>
             </div>
-
-            <!-- Active Connections Section - Now 4 columns -->
-            <div class="col-md-4">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <h5 class="m-0">Active Connections</h5>
-                        <span class="badge bg-success" id="connectionCount">0 active</span>
-                    </div>
-                    <div class="card-body">
-                        <div id="connectionsList">
-                            <!-- Active connections will be shown here -->
-                        </div>
-                    </div>
+            <div class="card-body p-2">
+                <div id="instancesList" class="d-flex flex-column gap-1">
+                    <!-- Instances will be loaded here -->
                 </div>
+                <div id="instancesPagination"></div>
             </div>
         </div>
 
@@ -247,7 +260,13 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    <div class="text-left">
+                    <div class="text-center">
+                        <p class="text-muted small mb-3">
+                            <span id="aboutVersion">Version ...</span>
+                            &nbsp;·&nbsp;
+                            <a href="https://github.com/mauroo82/ssm-manager/releases"
+                                class="text-muted text-decoration-none" target="_blank">Release notes</a>
+                        </p>
                         <p>
                             Hi there! 👋 I'm Mauro Arduini, and I built this app in my spare time with some amazing help
                             from Claude.ai.
@@ -310,12 +329,20 @@
                             <option value="ERROR">Error</option>
                         </select>
                     </div>
-                    <!-- Dark Mode -->
+                    <!-- Appearance -->
                     <div class="mb-3">
                         <h6>Appearance</h6>
                         <div class="form-check form-switch">
                             <input class="form-check-input" type="checkbox" id="darkModeSwitch">
                             <label class="form-check-label" for="darkModeSwitch">Dark Mode</label>
+                        </div>
+                    </div>
+                    <!-- Auto Refresh -->
+                    <div class="mb-3">
+                        <h6>Instance List</h6>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="autoRefreshSwitch">
+                            <label class="form-check-label" for="autoRefreshSwitch">Auto Refresh (every 30s)</label>
                         </div>
                     </div>
                 </div>
@@ -327,6 +354,146 @@
         </div>
     </div>
 
+
+    <!-- File Transfer Modal -->
+    <div class="modal fade" id="fileTransferModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header ssm-modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-files me-2"></i>File Transfer &mdash; <span id="ftInstanceName"></span>
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+
+                    <!-- SCP not available warning -->
+                    <div id="ftScpWarning" style="display:none">
+                        <div class="alert alert-warning">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            <strong>SCP not found on this machine.</strong>
+                            File transfer requires <code>scp</code> (OpenSSH). Install it via one of:
+                            <ul class="mt-2 mb-0 small">
+                                <li><strong>Option A (recommended):</strong> Windows Settings → Apps → Optional Features → <em>OpenSSH Client</em></li>
+                                <li><strong>Option B:</strong> <code>winget install Microsoft.OpenSSH.Beta</code></li>
+                                <li><strong>Option C:</strong> Install <a href="https://git-scm.com/download/win" target="_blank">Git for Windows</a> (bundles scp)</li>
+                            </ul>
+                        </div>
+                    </div>
+
+                    <!-- Direction selector -->
+                    <div class="d-flex gap-2 mb-4">
+                        <button class="btn btn-primary flex-fill ft-dir-btn" id="ftBtnUpload"
+                                onclick="app.setTransferDirection('upload')">
+                            <i class="bi bi-upload me-2"></i><strong>Upload</strong>
+                            <div class="small opacity-75">Local &rarr; Remote</div>
+                        </button>
+                        <button class="btn btn-outline-secondary flex-fill ft-dir-btn" id="ftBtnDownload"
+                                onclick="app.setTransferDirection('download')">
+                            <i class="bi bi-download me-2"></i><strong>Download</strong>
+                            <div class="small opacity-75">Remote &rarr; Local</div>
+                        </button>
+                    </div>
+
+                    <!-- Common fields -->
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <label class="form-label fw-semibold">Remote User</label>
+                            <input type="text" class="form-control" id="ftRemoteUser"
+                                   value="ec2-user" placeholder="ec2-user">
+                        </div>
+                        <div class="col-sm-8">
+                            <label class="form-label fw-semibold">
+                                SSH Key (.pem)
+                                <span class="text-muted fw-normal small">— optional if ssh-agent is active</span>
+                            </label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ftKeyPath"
+                                       placeholder="Leave empty if using ssh-agent or key in ~/.ssh">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="app.browseFile('ftKeyPath', 'open')">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Upload-specific fields -->
+                    <div id="ftUploadFields">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Local File</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ftLocalFile"
+                                       placeholder="Select the file to upload…">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="app.browseFile('ftLocalFile', 'open')">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Remote Destination Path</label>
+                            <input type="text" class="form-control" id="ftRemoteDestPath"
+                                   placeholder="/home/ec2-user/">
+                            <div class="form-text">Directory on the remote instance where the file will be placed.</div>
+                        </div>
+                    </div>
+
+                    <!-- Download-specific fields -->
+                    <div id="ftDownloadFields" style="display:none">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Remote File Path</label>
+                            <input type="text" class="form-control" id="ftRemoteFilePath"
+                                   placeholder="/home/ec2-user/file.txt">
+                            <div class="form-text">Full path of the file on the remote instance.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Local Destination Folder</label>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="ftLocalDestFolder"
+                                       placeholder="Select folder where to save the file…">
+                                <button class="btn btn-outline-secondary" type="button"
+                                        onclick="app.browseFile('ftLocalDestFolder', 'folder')">
+                                    <i class="bi bi-folder2-open"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Progress section — hidden until transfer starts -->
+                    <div id="ftProgress" style="display:none">
+                        <hr class="my-3">
+                        <div class="d-flex align-items-center justify-content-between mb-1">
+                            <small class="fw-semibold" id="ftProgressFile"></small>
+                            <small class="text-muted" id="ftProgressSpeed"></small>
+                        </div>
+                        <div class="progress mb-1" style="height:22px; border-radius:6px;">
+                            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                 id="ftProgressBar" role="progressbar"
+                                 style="width:0%; font-size:0.8rem; font-weight:600;">0%</div>
+                        </div>
+                        <div class="d-flex justify-content-between">
+                            <small class="text-muted" id="ftProgressMsg"></small>
+                            <small class="text-muted" id="ftProgressEta"></small>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"
+                            onclick="app.cancelTransfer()">Close</button>
+                    <button type="button" class="btn btn-danger" id="ftCancelBtn" style="display:none"
+                            onclick="app.cancelTransfer()">
+                        <i class="bi bi-x-circle me-1"></i>Cancel Transfer
+                    </button>
+                    <button type="button" class="btn btn-success" id="ftTransferBtn"
+                            onclick="app.startTransfer()">
+                        <i class="bi bi-send me-1"></i>Transfer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Toast Container -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3">
@@ -342,7 +509,7 @@
         </div>
     </div>
     <!-- Scripts -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.8/dist/js/bootstrap.bundle.min.js"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 
     <script>

@@ -1,5 +1,5 @@
 #define MyAppName "SSM Manager"
-#define MyAppVersion "1.31"
+#define MyAppVersion "2.0"
 #define MyAppPublisher "Mauro Arduini"
 #define MyAppURL "https://github.com/mauroo82/ssm-manager"
 #define MyAppExeName "SSM Manager.exe"
