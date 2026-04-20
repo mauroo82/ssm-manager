@@ -97,85 +97,68 @@
             </div>
         </div>
 
-        <!-- Main Content — horizontal flex layout with collapsible connections panel -->
-        <div class="ssm-main-row">
-            <!-- Instances panel — grows to fill available space -->
-            <div class="ssm-instances-col">
-                <div class="card shadow-sm">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3">
-                        <div class="d-flex align-items-center gap-2">
-                            <h5 class="m-0">Instances</h5>
-                            <h5 class="m-0" id="accountIdContainer" style="display: none;">
-                                - Account: <span id="awsAccountId"></span>
-                            </h5>
-                        </div>
-                        <div class="d-flex align-items-stretch gap-2">
-                            <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2" id="instanceCount"
-                                data-bs-toggle="tooltip" title="Total instances">
-                                <i class="bi bi-stack"></i>
-                                <span id="countTotal">0</span>
-                            </span>
-                            <span class="badge bg-dark d-flex align-items-center gap-1 fs-6 px-2"
-                                data-bs-toggle="tooltip" title="Linux instances">
-                                <i class="bi bi-terminal"></i>
-                                <span id="countLinux">0</span>
-                            </span>
-                            <span class="badge bg-primary d-flex align-items-center gap-1 fs-6 px-2"
-                                data-bs-toggle="tooltip" title="Windows instances">
-                                <i class="bi bi-windows"></i>
-                                <span id="countWindows">0</span>
-                            </span>
-                            <span class="badge badge-fucsia d-flex align-items-center gap-1 fs-6 px-2"
-                                data-bs-toggle="tooltip" title="SSM-enabled instances">
-                                <i class="bi bi-shield-check"></i>
-                                <span id="countSsm">0</span>
-                            </span>
-                            <button id="refreshBtn"
-                                class="btn btn-outline-secondary d-flex align-items-center gap-1 fs-6 px-2 py-0"
-                                data-bs-toggle="tooltip" title="Refresh instances">
-                                <i class="bi bi-arrow-clockwise"></i>
-                                <span id="refreshTimer" class="ssm-timer-text"></span>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="card-body">
-                        <div id="instancesList" class="row g-4">
-                            <!-- Instances will be loaded here -->
-                        </div>
-                    </div>
+        <!-- Main Content -->
+        <div class="card shadow-sm">
+            <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 gap-3">
+                <div class="d-flex align-items-center gap-2 flex-shrink-0">
+                    <h5 class="m-0">Instances</h5>
+                    <h5 class="m-0" id="accountIdContainer" style="display: none;">
+                        - Account: <span id="awsAccountId"></span>
+                    </h5>
+                </div>
+                <!-- Search by instance ID -->
+                <div class="input-group input-group-sm ssm-search-group" style="max-width:260px">
+                    <span class="input-group-text border-end-0">
+                        <i class="bi bi-search text-muted" style="font-size:0.8rem"></i>
+                    </span>
+                    <input type="text" class="form-control border-start-0 ps-0"
+                           id="instanceSearchInput"
+                           placeholder="Filter by instance ID…"
+                           oninput="app.onSearchInput(this.value)">
+                    <button class="btn btn-outline-secondary" id="instanceSearchClear" style="display:none"
+                            onclick="app.clearSearch()">
+                        <i class="bi bi-x" style="font-size:0.8rem"></i>
+                    </button>
+                </div>
+                <div class="d-flex align-items-stretch gap-2">
+                    <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="instanceCount"
+                        data-bs-toggle="tooltip" title="Total instances" onclick="app.setFilter('all')">
+                        <i class="bi bi-stack"></i>
+                        <span id="countTotal">0</span>
+                    </span>
+                    <span class="badge bg-dark d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countLinuxBadge"
+                        data-bs-toggle="tooltip" title="Linux instances" onclick="app.setFilter('linux')">
+                        <i class="bi bi-terminal"></i>
+                        <span id="countLinux">0</span>
+                    </span>
+                    <span class="badge bg-primary d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countWindowsBadge"
+                        data-bs-toggle="tooltip" title="Windows instances" onclick="app.setFilter('windows')">
+                        <i class="bi bi-windows"></i>
+                        <span id="countWindows">0</span>
+                    </span>
+                    <span class="badge badge-fucsia d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countSsmBadge"
+                        data-bs-toggle="tooltip" title="SSM-enabled instances" onclick="app.setFilter('ssm')">
+                        <i class="bi bi-shield-check"></i>
+                        <span id="countSsm">0</span>
+                    </span>
+                    <span class="badge bg-warning text-dark d-flex align-items-center gap-1 fs-6 px-2 ssm-counter-badge" id="countActiveBadge"
+                        data-bs-toggle="tooltip" title="Active connections" onclick="app.setFilter('active')">
+                        <i class="bi bi-activity"></i>
+                        <span id="countActive">0</span>
+                    </span>
+                    <button id="refreshBtn"
+                        class="btn btn-outline-secondary d-flex align-items-center gap-1 fs-6 px-2 py-0"
+                        data-bs-toggle="tooltip" title="Refresh instances">
+                        <i class="bi bi-arrow-clockwise"></i>
+                        <span id="refreshTimer" class="ssm-timer-text"></span>
+                    </button>
                 </div>
             </div>
-
-            <!-- Active Connections panel — collapsible horizontally -->
-            <div class="ssm-connections-col collapsed" id="connectionsCol">
-                <div class="card shadow-sm">
-                    <!-- Single adaptive header: layout changes via CSS based on collapsed state -->
-                    <div class="card-header bg-white conn-header py-3">
-                        <h5 class="m-0 text-nowrap conn-title">Active Connections</h5>
-                        <span class="badge bg-success d-flex align-items-center gap-1 fs-6 px-2 conn-badge" id="connectionCount">
-                            <i class="bi bi-activity"></i>
-                            <span id="countActive">0</span>
-                        </span>
-                        <button class="btn btn-sm btn-outline-secondary ssm-icon-btn"
-                            id="toggleConnectionsBtn"
-                            data-bs-toggle="tooltip" title="Expand">
-                            <i class="bi bi-arrows-angle-expand" id="toggleConnectionsIcon"></i>
-                        </button>
-                        <!-- Collapsed mini-view: pulsing icon + count, whole strip is clickable -->
-                        <div class="conn-collapsed-view" id="connCollapsedView">
-                            <span class="conn-collapsed-icon" id="connCollapsedIconWrap">
-                                <i class="bi bi-activity"></i>
-                            </span>
-                            <span class="conn-collapsed-count" id="connCollapsedCount">0</span>
-                        </div>
-                    </div>
-                    <!-- Body: hidden when collapsed -->
-                    <div class="card-body conn-body">
-                        <div id="connectionsList">
-                            <!-- Active connections will be shown here -->
-                        </div>
-                    </div>
+            <div class="card-body p-2">
+                <div id="instancesList" class="d-flex flex-column gap-1">
+                    <!-- Instances will be loaded here -->
                 </div>
+                <div id="instancesPagination"></div>
             </div>
         </div>
 

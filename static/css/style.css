@@ -278,6 +278,86 @@ body {
 }
 
 /* ============================================================
+   Search box — rounded pill style
+   ============================================================ */
+.ssm-search-group {
+    border-radius: 20px !important;
+    overflow: hidden;
+}
+.ssm-search-group .input-group-text,
+.ssm-search-group .form-control,
+.ssm-search-group .btn {
+    border-radius: 0 !important;
+    background-color: #f1f3f5;
+    border-color: #ced4da;
+}
+.ssm-search-group .form-control::placeholder { color: #adb5bd; }
+.ssm-search-group .form-control:focus {
+    background-color: #f8f9fa;
+    box-shadow: none;
+    border-color: #adb5bd;
+}
+[data-bs-theme="dark"] .ssm-search-group .input-group-text,
+[data-bs-theme="dark"] .ssm-search-group .form-control,
+[data-bs-theme="dark"] .ssm-search-group .btn {
+    background-color: rgba(255,255,255,0.07);
+    border-color: rgba(255,255,255,0.15);
+    color: #dee2e6;
+}
+
+/* ============================================================
+   Compact Instance List
+   ============================================================ */
+.instance-chevron-btn {
+    font-size: 0.8rem;
+    line-height: 1;
+    color: #adb5bd !important;
+    transition: color 0.15s ease;
+}
+.instance-chevron-btn:hover { color: var(--ssm-accent) !important; }
+
+.instance-chevron {
+    transition: transform 0.2s ease;
+}
+
+.instance-expand-body {
+    font-size: 0.875rem;
+}
+
+.instance-conn-item {
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--ssm-radius-sm);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+[data-bs-theme="dark"] .instance-conn-item {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.conn-link {
+    color: var(--ssm-accent);
+    text-decoration: none;
+}
+.conn-link:hover {
+    color: var(--ssm-accent-dark);
+}
+
+/* Active connection icon indicator */
+.instance-conn-indicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    color: var(--ssm-accent);
+    font-size: 0.85rem;
+    line-height: 1;
+}
+.instance-conn-indicator .conn-count {
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--ssm-accent);
+}
+
+/* ============================================================
    Instance Cards
    ============================================================ */
 .instance-card {
@@ -288,7 +368,7 @@ body {
 }
 
 .instance-card.os-linux {
-    border-left-color: var(--ssm-accent) !important;
+    border-left-color: #212529 !important;
 }
 
 .instance-card.os-windows {
@@ -302,6 +382,24 @@ body {
 .instance-card:hover {
     transform: translateY(-2px);
     box-shadow: var(--ssm-shadow-hover) !important;
+}
+
+/* ============================================================
+   Counter Badges (filterable)
+   ============================================================ */
+.ssm-counter-badge {
+    opacity: 0.5;
+    cursor: pointer;
+    transition: opacity 0.2s ease, transform 0.15s ease;
+    user-select: none;
+}
+.ssm-counter-badge:hover {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+.ssm-counter-badge.ssm-counter-active {
+    opacity: 1;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.8), 0 0 0 4px currentColor;
 }
 
 /* ============================================================

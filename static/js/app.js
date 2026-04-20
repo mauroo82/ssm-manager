@@ -9,6 +9,10 @@ const app = {
     currentRegion: '',
     instances: [],
     connections: [],
+    instanceFilter: null,
+    instanceSearch: '',
+    currentPage: 1,
+    expandedInstances: new Set(),
     awsAccountId: null,  // Add AWS account ID state 
     // Cached DOM elements
     elements: {},
@@ -42,17 +46,15 @@ const app = {
     cacheElements() {
         console.log('Caching DOM elements...');
         this.elements = {
-            profileSelect: document.getElementById('profileSelect'),
-            regionSelect: document.getElementById('regionSelect'),
-            connectBtn: document.getElementById('connectBtn'),
-            refreshBtn: document.getElementById('refreshBtn'),
-            autoRefreshSwitch: document.getElementById('autoRefreshSwitch'),
-            refreshTimer: document.getElementById('refreshTimer'),
-            instancesList: document.getElementById('instancesList'),
-            connectionsList: document.getElementById('connectionsList'),
-            instanceCount: document.getElementById('instanceCount'),
-            connectionCount: document.getElementById('connectionCount'),
-            loadingOverlay: document.getElementById('loadingOverlay')  // 
+            profileSelect:    document.getElementById('profileSelect'),
+            regionSelect:     document.getElementById('regionSelect'),
+            connectBtn:       document.getElementById('connectBtn'),
+            refreshBtn:       document.getElementById('refreshBtn'),
+            autoRefreshSwitch:document.getElementById('autoRefreshSwitch'),
+            refreshTimer:     document.getElementById('refreshTimer'),
+            instancesList:    document.getElementById('instancesList'),
+            instanceCount:    document.getElementById('instanceCount'),
+            loadingOverlay:   document.getElementById('loadingOverlay')
         };
     },
 
@@ -379,78 +381,199 @@ const app = {
         }
     },
 
-    // Render instances list
+    // Render instances list applying type filter, search filter and pagination
     renderInstances() {
         this.elements.instancesList.innerHTML = '';
-        
-        this.instances.forEach(instance => {
+
+        // 1. Type filter
+        const f = this.instanceFilter;
+        let filtered = this.instances.filter(i => {
+            if (!f || f === 'all') return true;
+            const os = (i.os || '').toLowerCase();
+            if (f === 'linux')   return os.includes('linux') || os.includes('unix');
+            if (f === 'windows') return os.includes('windows');
+            if (f === 'ssm')     return i.has_ssm;
+            if (f === 'active')  return this.connections.some(c => c.instanceId === i.id);
+            return true;
+        });
+
+        // 2. Search filter (instance ID)
+        if (this.instanceSearch) {
+            filtered = filtered.filter(i =>
+                i.id.toLowerCase().includes(this.instanceSearch)
+            );
+        }
+
+        // 3. Pagination
+        const PAGE_SIZE = 20;
+        const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+        if (this.currentPage > totalPages) this.currentPage = totalPages;
+        const start = (this.currentPage - 1) * PAGE_SIZE;
+        const paged  = filtered.slice(start, start + PAGE_SIZE);
+
+        paged.forEach(instance => {
             const card = this.createInstanceCard(instance);
             this.elements.instancesList.appendChild(card);
         });
+
+        // Restore expanded cards
+        this.expandedInstances.forEach(id => {
+            const body = document.getElementById(`iexpand-${id}`);
+            const chev = document.getElementById(`ichev-${id}`);
+            if (body) body.style.display = 'block';
+            if (chev) chev.className = 'bi bi-chevron-down instance-chevron';
+        });
+        this.renderConnections();
+        this.renderPagination(filtered.length, totalPages);
     },
 
-    // Create instance card
+    // Render pagination controls; hidden when total <= 20
+    renderPagination(total, totalPages) {
+        const container = document.getElementById('instancesPagination');
+        if (!container) return;
+        if (total <= 20) { container.innerHTML = ''; return; }
+
+        const cur = this.currentPage;
+        // Show up to 5 page buttons centred around current page
+        let ps = Math.max(1, cur - 2);
+        let pe = Math.min(totalPages, ps + 4);
+        if (pe - ps < 4) ps = Math.max(1, pe - 4);
+        const pages = Array.from({ length: pe - ps + 1 }, (_, i) => ps + i);
+
+        const from = (cur - 1) * 20 + 1;
+        const to   = Math.min(cur * 20, total);
+
+        container.innerHTML = `
+            <nav class="d-flex justify-content-between align-items-center mt-2 pt-2 border-top px-1">
+                <small class="text-muted">${from}–${to} of ${total} instances</small>
+                <ul class="pagination pagination-sm mb-0">
+                    <li class="page-item ${cur === 1 ? 'disabled' : ''}">
+                        <button class="page-link" onclick="app.setPage(${cur - 1})">&#8249;</button>
+                    </li>
+                    ${pages.map(p => `
+                        <li class="page-item ${p === cur ? 'active' : ''}">
+                            <button class="page-link" onclick="app.setPage(${p})">${p}</button>
+                        </li>`).join('')}
+                    <li class="page-item ${cur === totalPages ? 'disabled' : ''}">
+                        <button class="page-link" onclick="app.setPage(${cur + 1})">&#8250;</button>
+                    </li>
+                </ul>
+            </nav>`;
+    },
+
+    setPage(page) {
+        this.currentPage = page;
+        this.renderInstances();
+    },
+
+    onSearchInput(value) {
+        this.instanceSearch = value.trim().toLowerCase();
+        this.currentPage = 1;
+        const clearBtn = document.getElementById('instanceSearchClear');
+        if (clearBtn) clearBtn.style.display = this.instanceSearch ? '' : 'none';
+        this.renderInstances();
+    },
+
+    clearSearch() {
+        this.instanceSearch = '';
+        this.currentPage = 1;
+        const input = document.getElementById('instanceSearchInput');
+        if (input) input.value = '';
+        const clearBtn = document.getElementById('instanceSearchClear');
+        if (clearBtn) clearBtn.style.display = 'none';
+        this.renderInstances();
+    },
+
+    // Toggle instance filter; clicking the active filter resets it
+    setFilter(type) {
+        this.instanceFilter = (this.instanceFilter === type || type === 'all') ? null : type;
+        this.currentPage = 1;
+        const map = { linux: 'countLinuxBadge', windows: 'countWindowsBadge', ssm: 'countSsmBadge', active: 'countActiveBadge', all: 'instanceCount' };
+        Object.entries(map).forEach(([key, id]) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('ssm-counter-active', this.instanceFilter === key);
+        });
+        this.renderInstances();
+    },
+
+    // Create compact instance card with expandable detail section
     createInstanceCard(instance) {
         const card = document.createElement('div');
-        card.className = `col-md-12 ${instance.has_ssm ? '' : 'non-ssm'}`;
+        card.id = `icard-${instance.id}`;
 
-        // OS class drives the left-border color in CSS
         const os = (instance.os || '').toLowerCase();
         const osClass = os.includes('windows') ? 'os-windows'
                       : (os.includes('linux') || os.includes('unix')) ? 'os-linux'
                       : '';
-
         const statusClass = instance.state === 'running' ? 'success' : 'danger';
+        const ssmBadge = instance.has_ssm
+            ? '<span class="badge badge-fucsia status-badge">SSM</span>'
+            : '<span class="badge bg-secondary status-badge">No SSM</span>';
 
         card.innerHTML = `
-                <div class="card instance-card h-100 ${osClass}">
-                    <div class="card-header d-flex justify-content-between align-items-start">
-                        <div class="flex-grow-1">
-                            <div class="mt-2"> 
-                                <ul class="list-unstyled">
-                                    <li><b>${instance.name}</b></li>
-                                    <li><small class="text-muted">${instance.id}</small></li>
-                                    <li>
-                                        <span class="badge bg-${statusClass} status-badge">${instance.state}</span>
-                                        <span class="badge bg-warning status-badge">${instance.type}</span>
-                                        <span class="badge bg-info status-badge">${instance.os}</span>
-                                        ${instance.has_ssm ? 
-                                            '<span class="badge badge-fucsia status-badge ms-1">SSM</span>' : 
-                                            '<span class="badge bg-secondary status-badge ms-1">SSM not found</span>'}
-                                    </li>
-                                <ul>
-                            </div>
+            <div class="instance-card card ${osClass} ${instance.has_ssm ? '' : 'non-ssm'}">
+                <div class="card-body py-2 px-3">
+                    <!-- Compact row: always visible -->
+                    <div class="d-flex align-items-center gap-2">
+                        <button class="btn btn-link p-0 text-muted instance-chevron-btn"
+                                onclick="app.toggleInstanceExpand('${instance.id}')"
+                                data-bs-toggle="tooltip" title="Expand / Collapse">
+                            <i class="bi bi-chevron-right instance-chevron" id="ichev-${instance.id}"></i>
+                        </button>
+                        <span class="fw-semibold flex-grow-1">${instance.name}</span>
+                        <!-- Connection indicator: populated by renderConnections -->
+                        <span id="iconn-ind-${instance.id}"></span>
+                        <div class="d-flex gap-1">
+                            ${instance.has_ssm ? `
+                                <button class="btn btn-sm btn-dark" onclick="app.startSSH('${instance.id}')">
+                                    <i class="bi bi-terminal"></i> SSH
+                                </button>
+                                <button class="btn btn-sm btn-primary" onclick="app.startRDP('${instance.id}')">
+                                    <i class="bi bi-display"></i> RDP
+                                </button>
+                                <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instance.id}')">
+                                    <i class="bi bi-arrow-left-right"></i> Port
+                                </button>
+                            ` : ''}
+                            <button class="btn btn-sm btn-ottanio text-white" onclick="app.showInstanceDetails('${instance.id}')">
+                                <i class="bi bi-info-circle"></i> Info
+                            </button>
                         </div>
-                        <div>
-                            ${this.createActionButtons(instance.id)}
+                    </div>
+                    <!-- Expanded detail section: hidden by default -->
+                    <div class="instance-expand-body" id="iexpand-${instance.id}" style="display:none;">
+                        <div class="mt-2 ps-4 border-top pt-2">
+                            <small class="text-muted d-block mb-1">${instance.id}</small>
+                            <div class="d-flex flex-wrap gap-1 mb-2">
+                                <span class="badge bg-${statusClass} status-badge">${instance.state}</span>
+                                <span class="badge bg-warning status-badge">${instance.type}</span>
+                                <span class="badge bg-info status-badge">${instance.os}</span>
+                                ${ssmBadge}
+                            </div>
+                            <!-- Active connections for this instance, populated by renderConnections -->
+                            <div id="iconns-${instance.id}"></div>
                         </div>
                     </div>
                 </div>
+            </div>
         `;
-        
+
         return card;
     },
 
-    // Create action buttons for instance
-    createActionButtons(instanceId) {
-        return `
-            <div class="d-flex justify-content-between mt-3 gap-2">
-                ${this.instances.find(i => i.id === instanceId).has_ssm ? `
-                    <button class="btn btn-sm btn-dark" onclick="app.startSSH('${instanceId}')">
-                        <i class="bi bi-terminal"></i> SSH
-                    </button>
-                    <button class="btn btn-sm btn-primary" onclick="app.startRDP('${instanceId}')">
-                        <i class="bi bi-display"></i> RDP
-                    </button>
-                    <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instanceId}')">
-                        <i class="bi bi-arrow-left-right"></i> Port
-                    </button>
-                ` : ''}
-                <button class="btn btn-sm btn-ottanio text-white" onclick="app.showInstanceDetails('${instanceId}')">
-                    <i class="bi bi-info-circle"></i> Info
-                </button>
-            </div>
-        `;
+    // Toggle expand/collapse of an instance card detail section
+    toggleInstanceExpand(instanceId) {
+        const body = document.getElementById(`iexpand-${instanceId}`);
+        const chev = document.getElementById(`ichev-${instanceId}`);
+        if (!body) return;
+        const expanding = body.style.display === 'none';
+        body.style.display = expanding ? 'block' : 'none';
+        if (chev) chev.className = expanding
+            ? 'bi bi-chevron-down instance-chevron'
+            : 'bi bi-chevron-right instance-chevron';
+        // Persist expanded state so refresh doesn't collapse cards
+        if (expanding) this.expandedInstances.add(instanceId);
+        else           this.expandedInstances.delete(instanceId);
     },
 
     // Utility functions
@@ -522,7 +645,8 @@ const app = {
         document.getElementById('countWindows').textContent = windows;
         document.getElementById('countSsm').textContent = ssm;
 
-        document.getElementById('countActive').textContent = this.connections.length;
+        const activeEl = document.getElementById('countActive');
+        if (activeEl) activeEl.textContent = this.connections.length;
     },
 
     // Connection Management Methods
@@ -1008,31 +1132,7 @@ const app = {
             this.toggleAutoRefresh(e.target.checked);
         };
 
-        // Horizontal expand/collapse of Active Connections panel
-        const toggleBtn      = document.getElementById('toggleConnectionsBtn');
-        const toggleIcon     = document.getElementById('toggleConnectionsIcon');
-        const connectionsCol = document.getElementById('connectionsCol');
-        const connHeader     = connectionsCol?.querySelector('.conn-header');
-
-        const togglePanel = () => {
-            if (!connectionsCol) return;
-            const isCollapsed = connectionsCol.classList.toggle('collapsed');
-            if (toggleIcon) {
-                toggleIcon.className = isCollapsed
-                    ? 'bi bi-arrows-angle-expand'
-                    : 'bi bi-arrows-angle-contract';
-            }
-        };
-
-        // Toggle button (visible in expanded mode)
-        if (toggleBtn) toggleBtn.onclick = (ev) => { ev.stopPropagation(); togglePanel(); };
-
-        // Clicking the entire header in collapsed mode expands the panel
-        if (connHeader) {
-            connHeader.addEventListener('click', (e) => {
-                if (connectionsCol.classList.contains('collapsed')) togglePanel();
-            });
-        }
+        // Instance cards: chevron expand/collapse is handled via onclick in createInstanceCard
     };
     
     app.updateRefreshTimer = function() {
@@ -1269,73 +1369,81 @@ const app = {
         }
     };
     
-    // Modifica la funzione renderConnections per gestire meglio le informazioni di connessione
+    // Render connections inline inside each expanded instance card
     app.renderConnections = function() {
-        const container = this.elements.connectionsList;
-        container.innerHTML = '';
+        // Update active connections counter in the instances header
+        const countActive = document.getElementById('countActive');
+        if (countActive) countActive.textContent = this.connections.length;
 
-        // Update collapsed mini-view: icon pulses amber + count when active
-        const iconWrap = document.getElementById('connCollapsedIconWrap');
-        const countEl  = document.getElementById('connCollapsedCount');
-        const active   = this.connections.length > 0;
-        if (iconWrap) iconWrap.className = `conn-collapsed-icon${active ? ' has-connections' : ''}`;
-        if (countEl) {
-            countEl.textContent = this.connections.length;
-            countEl.className   = `conn-collapsed-count${active ? ' has-connections' : ''}`;
-        }
+        // Update per-instance connection indicator icon in the compact row
+        this.instances.forEach(inst => {
+            const indEl = document.getElementById(`iconn-ind-${inst.id}`);
+            if (indEl) {
+                const count = this.connections.filter(c => c.instanceId === inst.id).length;
+                if (count > 0) {
+                    indEl.innerHTML = `<span class="instance-conn-indicator" data-bs-toggle="tooltip" title="${count} active connection${count > 1 ? 's' : ''}">
+                        <i class="bi bi-activity"></i>${count > 1 ? `<span class="conn-count">${count}</span>` : ''}
+                    </span>`;
+                } else {
+                    indEl.innerHTML = '';
+                }
+            }
+        });
 
-        if (this.connections.length === 0) {
-            container.innerHTML = `
-                <div class="text-center text-muted p-4">
-                    <i class="bi bi-diagram-2 fs-2"></i>
-                    <p class="mt-2">No active connections</p>
-                </div>
-            `;
-            return;
-        }
-    
-        this.connections.forEach(conn => {
-            const element = document.createElement('div');
-            element.className = 'connection-item';
-            
-            // Format timestamp
-            const timestamp = new Date(conn.timestamp).toLocaleTimeString();
-            
-            // Create connection info based on type
-            let connectionInfo = '';
-            if (conn.type === 'RDP' || conn.type === 'Custom Port' || conn.type === 'Remote Host Port') {
-                connectionInfo = `
-                    <div class="text-muted small">
-                        Local Port: ${conn.localPort}
-                        ${conn.remotePort ? `, Remote Port: ${conn.remotePort}` : ''}
-                        ${conn.remoteHost ? `, Host: ${conn.remoteHost}` : ''}
+        this.instances.forEach(inst => {
+            const el = document.getElementById(`iconns-${inst.id}`);
+            if (!el) return;
+
+            const conns = this.connections.filter(c => c.instanceId === inst.id);
+            if (conns.length === 0) { el.innerHTML = ''; return; }
+
+            const header = `
+                <div class="d-flex align-items-center gap-1 mt-2 mb-1">
+                    <i class="bi bi-activity" style="font-size:0.75rem;color:var(--ssm-accent)"></i>
+                    <small class="fw-semibold text-muted" style="font-size:0.75rem;text-transform:uppercase;letter-spacing:0.04em">Active connections</small>
+                </div>`;
+
+            el.innerHTML = header + conns.map(conn => {
+                const ts    = new Date(conn.timestamp).toLocaleTimeString();
+                const color = this.getConnectionTypeColor(conn.type);
+                const badgeClass = color.startsWith('#') ? 'badge' : `badge bg-${color}`;
+                const badgeStyle = color.startsWith('#') ? `background-color:${color};color:#fff` : '';
+
+                // Port info: local port + remote port + optional clickable link
+                let portInfo = '';
+                if (conn.localPort) {
+                    portInfo = `<span class="text-muted ms-1">local&nbsp;${conn.localPort}`;
+                    if (conn.remotePort) portInfo += `&nbsp;·&nbsp;remote&nbsp;${conn.remotePort}`;
+                    portInfo += `</span>`;
+
+                    // Clickable localhost link for Custom Port / Remote Host Port only
+                    if (conn.type === 'Custom Port' || conn.type === 'Remote Host Port') {
+                        const proto = (conn.remotePort === 443 || conn.remotePort === '443') ? 'https' : 'http';
+                        portInfo += `&nbsp;<a href="${proto}://localhost:${conn.localPort}"
+                                           target="_blank"
+                                           class="conn-link"
+                                           onclick="event.stopPropagation()">
+                                            <i class="bi bi-box-arrow-up-right" style="font-size:0.7rem"></i>&nbsp;localhost:${conn.localPort}
+                                         </a>`;
+                    }
+                }
+
+                return `
+                    <div class="instance-conn-item d-flex align-items-center justify-content-between mt-1">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="${badgeClass}" style="${badgeStyle}">${conn.type}</span>
+                            <small class="text-muted d-flex align-items-center gap-1">
+                                <i class="bi bi-clock" style="font-size:0.7rem"></i>${ts}
+                            </small>
+                            ${portInfo}
+                        </div>
+                        <button class="btn btn-sm btn-outline-danger py-0 px-1 ms-1 flex-shrink-0"
+                                onclick="app.terminateConnection('${conn.id}')">
+                            <i class="bi bi-x-lg" style="font-size:0.7rem"></i>
+                        </button>
                     </div>
                 `;
-            }
-    
-            element.innerHTML = `
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="badge 
-                                ${this.getConnectionTypeColor(conn.type) === 'dark' ? 'bg-dark' : ''} 
-                                ${this.getConnectionTypeColor(conn.type) === 'primary' ? 'bg-primary' : ''}" 
-                                style="${this.getConnectionTypeColor(conn.type) === '#800080' ? `background-color: #800080;` : ''}">
-                                ${conn.type}
-                            </span>
-                        </div>
-                        <div class="text-muted small"><b>ID: ${this.getInstanceName(conn.instanceId)}</b></div>
-                        ${connectionInfo}
-                        <div class="text-muted small">Started at ${timestamp}</div>
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" 
-                            onclick="app.terminateConnection('${conn.id}')">
-                        <i class="bi bi-x-lg"></i>
-                    </button>
-                </div>
-            `;
-            
-            container.appendChild(element);
+            }).join('');
         });
     };
     
