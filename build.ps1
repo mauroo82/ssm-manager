@@ -13,7 +13,6 @@ pyinstaller --onedir --noconsole `
   --add-data "static/js;static/js" `
   --add-data "templates;templates" `
   --add-data "image;image" `
-  --add-data "splash.jpg;." `
   --add-data "icon.ico;." `
   --icon=icon.ico `
   --name="SSM Manager" `
