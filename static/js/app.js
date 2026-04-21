@@ -415,10 +415,11 @@ const app = {
             return true;
         });
 
-        // 2. Search filter (instance ID)
+        // 2. Search filter (instance ID or name)
         if (this.instanceSearch) {
             filtered = filtered.filter(i =>
-                i.id.toLowerCase().includes(this.instanceSearch)
+                i.id.toLowerCase().includes(this.instanceSearch) ||
+                (i.name || '').toLowerCase().includes(this.instanceSearch)
             );
         }
 
