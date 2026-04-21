@@ -1075,28 +1075,28 @@ const app = {
     app.refreshData = async function() {
         if (!this.isConnected) return;
 
-        try {
-            this.showLoading();
+        // Show inline spinner in the instances list only — do not cover the whole UI
+        this.elements.instancesList.innerHTML = `
+            <div class="d-flex justify-content-center align-items-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>`;
 
-            // Reload instances
-            const response = await fetch('/api/refresh', {
-                method: 'POST'
-            });
-    
+        try {
+            const response = await fetch('/api/refresh', { method: 'POST' });
             if (!response.ok) throw new Error('Refresh failed');
-    
+
             const result = await response.json();
             if (result.status === 'success') {
                 this.instances = result.instances;
                 this.renderInstances();
                 this.updateCounters();
-                this.showSuccess('Data refreshed successfully');
             }
         } catch (error) {
             this.showError('Failed to refresh data: ' + error.message);
-            this.toggleAutoRefresh(false);  // Stop auto-refresh on error
-        } finally {
-            this.hideLoading();
+            this.toggleAutoRefresh(false);
+            this.renderInstances();  // Restore previous list on error
         }
     };
     
