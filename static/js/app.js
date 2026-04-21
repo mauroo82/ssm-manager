@@ -40,12 +40,12 @@ const app = {
             this.initializeComponents();
             this.setupEventListeners();
             await this.loadProfilesAndRegions();
-            this.startConnectionMonitoring(); 
+            this.startConnectionMonitoring();
+            this.checkForUpdate();   // Non-blocking update check in background
             console.log('Application initialized successfully');
         } catch (error) {
             console.error('Error initializing application:', error);
         }
-
     },
 
     // Cache DOM elements for better performance
@@ -614,6 +614,37 @@ const app = {
     hideLoading() {
         if (this.elements.loadingOverlay) {
             this.elements.loadingOverlay.classList.add('d-none');
+        }
+    },
+
+    /**
+     * Check GitHub for a newer release and show a dismissible banner if one is found.
+     * Runs in background — any network error is silently ignored.
+     */
+    async checkForUpdate() {
+        try {
+            const response = await fetch('/api/check-update');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data.update_available) return;
+
+            const banner = document.createElement('div');
+            banner.id = 'updateBanner';
+            banner.className = 'alert alert-warning alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 py-2';
+            banner.setAttribute('role', 'alert');
+            banner.innerHTML = `
+                <i class="bi bi-arrow-up-circle-fill fs-5"></i>
+                <span>
+                    New version available: <strong>v${data.latest_version}</strong>
+                    (current: v${data.current_version}).
+                    <a href="${data.release_url}" target="_blank" class="alert-link ms-1">Download now</a>
+                </span>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            // Insert at top of page, before main container
+            document.body.insertBefore(banner, document.body.firstChild);
+        } catch (err) {
+            console.warn('Update check failed:', err);
         }
     },
 

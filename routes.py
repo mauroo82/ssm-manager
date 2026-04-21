@@ -1,4 +1,6 @@
 from flask import jsonify, request, render_template
+import urllib.request
+import json as _json
 import base64
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
@@ -724,6 +726,72 @@ def set_log_level():
         return jsonify({'error': str(e)}), 500
     
     
+# ---------------------------------------------------------------------------
+# Update check
+# ---------------------------------------------------------------------------
+
+GITHUB_API_LATEST = "https://api.github.com/repos/mauroo82/ssm-manager/releases/latest"
+GITHUB_RELEASES_PAGE = "https://github.com/mauroo82/ssm-manager/releases"
+
+
+@app.route('/api/check-update', methods=['GET'])
+def check_update():
+    """Check GitHub for a newer release than the currently running version.
+
+    Calls the GitHub Releases API (unauthenticated, 60 req/h limit — fine for
+    a single-user desktop app). Compares the latest tag to __version__ using
+    simple tuple comparison after stripping leading 'v' characters.
+
+    Returns:
+        JSON with:
+            update_available (bool): True when a newer release exists on GitHub.
+            current_version (str): The version currently running.
+            latest_version (str): The latest tag found on GitHub.
+            release_url (str): Direct link to the GitHub Releases page.
+    """
+    try:
+        req = urllib.request.Request(
+            GITHUB_API_LATEST,
+            headers={"User-Agent": f"ssm-manager/{__version__}"},
+        )
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            data = _json.loads(resp.read().decode())
+
+        latest_tag = data.get("tag_name", "").lstrip("v")
+        current    = __version__.lstrip("v")
+
+        def _to_tuple(v: str):
+            """Convert version string to comparable int tuple, e.g. '2.1' → (2, 1)."""
+            try:
+                return tuple(int(x) for x in v.split("."))
+            except ValueError:
+                return (0,)
+
+        update_available = _to_tuple(latest_tag) > _to_tuple(current)
+
+        logging.info(
+            f"Update check: current={current}, latest={latest_tag}, "
+            f"update_available={update_available}"
+        )
+        return jsonify({
+            "update_available": update_available,
+            "current_version":  current,
+            "latest_version":   latest_tag,
+            "release_url":      GITHUB_RELEASES_PAGE,
+        })
+
+    except Exception as e:
+        # Network errors are non-fatal — app works fine without update check
+        logging.warning(f"Update check failed: {e}")
+        return jsonify({
+            "update_available": False,
+            "current_version":  __version__,
+            "latest_version":   None,
+            "release_url":      GITHUB_RELEASES_PAGE,
+            "error":            str(e),
+        })
+
+
 # ---------------------------------------------------------------------------
 # File Transfer (SCP over SSM SSH tunnel)
 # ---------------------------------------------------------------------------
