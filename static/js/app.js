@@ -778,6 +778,8 @@ const app = {
             
             // Update modal content
             const contentDiv = document.getElementById('instanceDetailsContent');
+            const isWindows = (details.platform || '').toLowerCase().includes('windows');
+
             contentDiv.innerHTML = `
                 <div class="table-responsive">
                     <table class="table table-hover">
@@ -801,13 +803,28 @@ const app = {
                         Click on any value to copy to clipboard
                     </div>
                 </div>
+                ${isWindows ? `
+                <hr>
+                <div id="winPasswordSection">
+                    <h6 class="mb-2"><i class="bi bi-key-fill me-1"></i>Decrypt Administrator Password</h6>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Paste your PEM private key:</label>
+                        <textarea id="winPemKey" class="form-control form-control-sm font-monospace"
+                                  rows="5" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"></textarea>
+                    </div>
+                    <button class="btn btn-sm btn-warning" id="winDecryptBtn"
+                            onclick="app.decryptWindowsPassword('${details.id}')">
+                        <i class="bi bi-unlock-fill me-1"></i>Decrypt Password
+                    </button>
+                    <div id="winPasswordResult" class="mt-2"></div>
+                </div>` : ''}
             `;
-            
+
             // Add click handlers for copying
             contentDiv.querySelectorAll('.copy-value').forEach(element => {
                 element.addEventListener('click', () => this.copyToClipboard(element.dataset.value));
             });
-            
+
             // Show the modal
             this.modals.instanceDetails.show();
             
@@ -819,6 +836,58 @@ const app = {
         }
     },
     
+    /**
+     * Decrypt the Windows Administrator password for a Windows EC2 instance.
+     * Reads the PEM key from the textarea, sends it to the backend which calls
+     * EC2 get_password_data and decrypts locally with RSA PKCS1v15.
+     * The private key is sent only to localhost — never to AWS.
+     * @param {string} instanceId - EC2 instance ID.
+     */
+    async decryptWindowsPassword(instanceId) {
+        const pemKey = (document.getElementById('winPemKey')?.value || '').trim();
+        const resultDiv = document.getElementById('winPasswordResult');
+        const btn = document.getElementById('winDecryptBtn');
+
+        if (!pemKey) {
+            resultDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0 small">Paste your PEM private key first.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Decrypting…';
+        resultDiv.innerHTML = '';
+
+        try {
+            const response = await fetch(`/api/windows-password/${instanceId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ private_key: pemKey }),
+            });
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">${data.error || 'Decryption failed'}</div>`;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success py-2 mb-0">
+                        <div class="small text-muted mb-1">Administrator Password:</div>
+                        <div class="d-flex align-items-center gap-2">
+                            <code id="winPassword" class="fs-6 user-select-all">${data.password}</code>
+                            <button class="btn btn-sm btn-outline-secondary py-0"
+                                    onclick="app.copyToClipboard('${data.password}')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>`;
+            }
+        } catch (err) {
+            resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">Request failed: ${err.message}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-unlock-fill me-1"></i>Decrypt Password';
+        }
+    },
+
     // Helper method to create detail rows
     createDetailRow(label, value) {
         return `
