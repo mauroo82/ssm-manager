@@ -201,6 +201,32 @@ class AWSManager:
             return None
 
 
+    def get_windows_password_data(self, instance_id: str) -> dict:
+        """Retrieve the encrypted Administrator password for a Windows EC2 instance.
+
+        The password is encrypted with the key pair's public key by EC2 at launch.
+        The caller is responsible for RSA-decrypting it with the matching private key.
+
+        Args:
+            instance_id: The EC2 instance ID.
+
+        Returns:
+            A dict with 'password_data' (base64 str) and 'timestamp' (str),
+            or 'error' (str) on failure. 'password_data' is empty string when
+            the password is not yet available (instance still initialising).
+        """
+        if not self.is_connected:
+            return {"error": "Not connected to AWS"}
+        try:
+            response = self.ec2_client.get_password_data(InstanceId=instance_id)
+            return {
+                "password_data": response.get("PasswordData", ""),
+                "timestamp": str(response.get("Timestamp", "")),
+            }
+        except ClientError as e:
+            logger.error(f"get_windows_password_data failed for {instance_id}: {e}")
+            return {"error": str(e)}
+
     def start_ssh_session(self, instance_id):
         if not self.is_connected:
             logger.warning("Attempted to start SSH session without an active connection")

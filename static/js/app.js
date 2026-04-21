@@ -40,12 +40,12 @@ const app = {
             this.initializeComponents();
             this.setupEventListeners();
             await this.loadProfilesAndRegions();
-            this.startConnectionMonitoring(); 
+            this.startConnectionMonitoring();
+            this.checkForUpdate();   // Non-blocking update check in background
             console.log('Application initialized successfully');
         } catch (error) {
             console.error('Error initializing application:', error);
         }
-
     },
 
     // Cache DOM elements for better performance
@@ -415,10 +415,11 @@ const app = {
             return true;
         });
 
-        // 2. Search filter (instance ID)
+        // 2. Search filter (instance ID or name)
         if (this.instanceSearch) {
             filtered = filtered.filter(i =>
-                i.id.toLowerCase().includes(this.instanceSearch)
+                i.id.toLowerCase().includes(this.instanceSearch) ||
+                (i.name || '').toLowerCase().includes(this.instanceSearch)
             );
         }
 
@@ -546,9 +547,10 @@ const app = {
                                 <button class="btn btn-sm btn-dark" onclick="app.startSSH('${instance.id}')">
                                     <i class="bi bi-terminal"></i> SSH
                                 </button>
+                                ${!os.includes('linux') ? `
                                 <button class="btn btn-sm btn-primary" onclick="app.startRDP('${instance.id}')">
                                     <i class="bi bi-display"></i> RDP
-                                </button>
+                                </button>` : ''}
                                 <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instance.id}')">
                                     <i class="bi bi-arrow-left-right"></i> Port
                                 </button>
@@ -612,6 +614,37 @@ const app = {
     hideLoading() {
         if (this.elements.loadingOverlay) {
             this.elements.loadingOverlay.classList.add('d-none');
+        }
+    },
+
+    /**
+     * Check GitHub for a newer release and show a dismissible banner if one is found.
+     * Runs in background — any network error is silently ignored.
+     */
+    async checkForUpdate() {
+        try {
+            const response = await fetch('/api/check-update');
+            if (!response.ok) return;
+            const data = await response.json();
+            if (!data.update_available) return;
+
+            const banner = document.createElement('div');
+            banner.id = 'updateBanner';
+            banner.className = 'alert alert-warning alert-dismissible d-flex align-items-center gap-2 mb-0 rounded-0 py-2';
+            banner.setAttribute('role', 'alert');
+            banner.innerHTML = `
+                <i class="bi bi-arrow-up-circle-fill fs-5"></i>
+                <span>
+                    New version available: <strong>v${data.latest_version}</strong>
+                    (current: v${data.current_version}).
+                    <a href="${data.release_url}" target="_blank" class="alert-link ms-1">Download now</a>
+                </span>
+                <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert" aria-label="Close"></button>
+            `;
+            // Insert at top of page, before main container
+            document.body.insertBefore(banner, document.body.firstChild);
+        } catch (err) {
+            console.warn('Update check failed:', err);
         }
     },
 
@@ -776,6 +809,8 @@ const app = {
             
             // Update modal content
             const contentDiv = document.getElementById('instanceDetailsContent');
+            const isWindows = (details.platform || '').toLowerCase().includes('windows');
+
             contentDiv.innerHTML = `
                 <div class="table-responsive">
                     <table class="table table-hover">
@@ -799,13 +834,28 @@ const app = {
                         Click on any value to copy to clipboard
                     </div>
                 </div>
+                ${isWindows ? `
+                <hr>
+                <div id="winPasswordSection">
+                    <h6 class="mb-2"><i class="bi bi-key-fill me-1"></i>Decrypt Administrator Password</h6>
+                    <div class="mb-2">
+                        <label class="form-label small mb-1">Paste your PEM private key:</label>
+                        <textarea id="winPemKey" class="form-control form-control-sm font-monospace"
+                                  rows="5" placeholder="-----BEGIN RSA PRIVATE KEY-----&#10;...&#10;-----END RSA PRIVATE KEY-----"></textarea>
+                    </div>
+                    <button class="btn btn-sm btn-warning" id="winDecryptBtn"
+                            onclick="app.decryptWindowsPassword('${details.id}')">
+                        <i class="bi bi-unlock-fill me-1"></i>Decrypt Password
+                    </button>
+                    <div id="winPasswordResult" class="mt-2"></div>
+                </div>` : ''}
             `;
-            
+
             // Add click handlers for copying
             contentDiv.querySelectorAll('.copy-value').forEach(element => {
                 element.addEventListener('click', () => this.copyToClipboard(element.dataset.value));
             });
-            
+
             // Show the modal
             this.modals.instanceDetails.show();
             
@@ -817,6 +867,58 @@ const app = {
         }
     },
     
+    /**
+     * Decrypt the Windows Administrator password for a Windows EC2 instance.
+     * Reads the PEM key from the textarea, sends it to the backend which calls
+     * EC2 get_password_data and decrypts locally with RSA PKCS1v15.
+     * The private key is sent only to localhost — never to AWS.
+     * @param {string} instanceId - EC2 instance ID.
+     */
+    async decryptWindowsPassword(instanceId) {
+        const pemKey = (document.getElementById('winPemKey')?.value || '').trim();
+        const resultDiv = document.getElementById('winPasswordResult');
+        const btn = document.getElementById('winDecryptBtn');
+
+        if (!pemKey) {
+            resultDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0 small">Paste your PEM private key first.</div>';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Decrypting…';
+        resultDiv.innerHTML = '';
+
+        try {
+            const response = await fetch(`/api/windows-password/${instanceId}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ private_key: pemKey }),
+            });
+            const data = await response.json();
+
+            if (!response.ok || data.error) {
+                resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">${data.error || 'Decryption failed'}</div>`;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="alert alert-success py-2 mb-0">
+                        <div class="small text-muted mb-1">Administrator Password:</div>
+                        <div class="d-flex align-items-center gap-2">
+                            <code id="winPassword" class="fs-6 user-select-all">${data.password}</code>
+                            <button class="btn btn-sm btn-outline-secondary py-0"
+                                    onclick="app.copyToClipboard('${data.password}')">
+                                <i class="bi bi-clipboard"></i>
+                            </button>
+                        </div>
+                    </div>`;
+            }
+        } catch (err) {
+            resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0 small">Request failed: ${err.message}</div>`;
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-unlock-fill me-1"></i>Decrypt Password';
+        }
+    },
+
     // Helper method to create detail rows
     createDetailRow(label, value) {
         return `
@@ -1073,28 +1175,28 @@ const app = {
     app.refreshData = async function() {
         if (!this.isConnected) return;
 
-        try {
-            this.showLoading();
+        // Show inline spinner in the instances list only — do not cover the whole UI
+        this.elements.instancesList.innerHTML = `
+            <div class="d-flex justify-content-center align-items-center py-5">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>`;
 
-            // Reload instances
-            const response = await fetch('/api/refresh', {
-                method: 'POST'
-            });
-    
+        try {
+            const response = await fetch('/api/refresh', { method: 'POST' });
             if (!response.ok) throw new Error('Refresh failed');
-    
+
             const result = await response.json();
             if (result.status === 'success') {
                 this.instances = result.instances;
                 this.renderInstances();
                 this.updateCounters();
-                this.showSuccess('Data refreshed successfully');
             }
         } catch (error) {
             this.showError('Failed to refresh data: ' + error.message);
-            this.toggleAutoRefresh(false);  // Stop auto-refresh on error
-        } finally {
-            this.hideLoading();
+            this.toggleAutoRefresh(false);
+            this.renderInstances();  // Restore previous list on error
         }
     };
     

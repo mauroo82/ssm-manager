@@ -13,7 +13,6 @@ pyinstaller --onedir --noconsole `
   --add-data "static/js;static/js" `
   --add-data "templates;templates" `
   --add-data "image;image" `
-  --add-data "splash.jpg;." `
   --add-data "icon.ico;." `
   --icon=icon.ico `
   --name="SSM Manager" `
@@ -34,4 +33,4 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-Write-Host "Done! Installer ready in: installer\SSM-Manager-v2.0-setup.exe" -ForegroundColor Green
+Write-Host "Done! Installer ready in: installer\SSM-Manager-v2.1-setup.exe" -ForegroundColor Green

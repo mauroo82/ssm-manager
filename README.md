@@ -44,7 +44,7 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 - **Compact instance list** — each row shows the VM name and action buttons; click the chevron to expand full details
 - **Expanded card** shows: instance ID, OS, VM type, state, SSM status badges, and any active connections on that instance
 - **Instance counters** — total, Linux, Windows, SSM-enabled, and active connections; click a counter to filter the list, click again to reset
-- **Real-time search** by instance ID — filters instantly as you type
+- **Real-time search** by instance ID or name — filters instantly as you type
 - **Pagination** — 20 instances per page; navigation appears automatically when more than 20 instances are present
 - Paginated AWS API calls — supports environments with more than 50 SSM instances
 - **Connection indicator** — a small amber icon appears next to the action buttons whenever that instance has at least one active connection
@@ -54,7 +54,7 @@ SSM Manager is a Windows desktop application that provides a graphical interface
   - Direct SSH connection to instances via SSM
   - Session monitoring and automatic cleanup when the terminal window closes
 
-- **RDP Connections**
+- **RDP Connections** — Windows instances only
   - Automated RDP port forwarding setup
   - Integration with Windows Remote Desktop (`mstsc`)
   - Dynamic local port allocation
@@ -79,6 +79,8 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 - Active connection count badge in the instance list header
 
 ### Additional Features
+- **Automatic update check** — on startup the app silently checks GitHub for a newer release; if one is found, a dismissible banner with a download link appears at the top of the screen
+- **Windows Administrator password decryption** — in the Info modal of a Windows instance, paste your PEM private key to decrypt the Administrator password retrieved from EC2; decryption happens locally, the key never leaves your machine
 - App version shown in the About modal with a link to release notes
 - Logging system with configurable log level (in Settings)
 - Last used profile and region restored on next launch
