@@ -547,9 +547,10 @@ const app = {
                                 <button class="btn btn-sm btn-dark" onclick="app.startSSH('${instance.id}')">
                                     <i class="bi bi-terminal"></i> SSH
                                 </button>
+                                ${!os.includes('linux') ? `
                                 <button class="btn btn-sm btn-primary" onclick="app.startRDP('${instance.id}')">
                                     <i class="bi bi-display"></i> RDP
-                                </button>
+                                </button>` : ''}
                                 <button class="btn btn-sm btn-purple text-white" onclick="app.showCustomPortModal('${instance.id}')">
                                     <i class="bi bi-arrow-left-right"></i> Port
                                 </button>
