@@ -171,4 +171,5 @@ preferences.json
 installer/
 .code-workspace
 ssm-manager-site/
+generate_icon.py
 
