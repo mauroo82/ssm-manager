@@ -18,9 +18,6 @@ No terminal juggling. No forgotten flags. Just click and connect.
   <a href="https://github.com/mauroo82/ssm-manager/blob/main/LICENSE">
     <img src="https://img.shields.io/badge/License-MIT-green" alt="License"/>
   </a>
-  <a href="https://github.com/mauroo82/ssm-manager/stargazers">
-    <img src="https://img.shields.io/github/stars/mauroo82/ssm-manager?style=flat&color=yellow" alt="Stars"/>
-  </a>
 </p>
 
 <p align="center">
