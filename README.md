@@ -43,6 +43,7 @@ No terminal juggling. No forgotten flags. Just click and connect.
 - [📦 Installation](#-installation)
 - [🛡️ Security & Trust](#%EF%B8%8F-security--trust)
 - [📖 Usage](#-usage)
+- [🔧 Making an EC2 Instance Available via AWS SSM](#-making-an-ec2-instance-available-via-aws-ssm)
 - [🔨 Building from Source](#-building-from-source)
 - [🤝 Contributing](#-contributing)
 - [🐛 Bug Reports](#-bug-reports)
@@ -191,6 +192,99 @@ Every line is open and auditable in this repository.
 > [!TIP]
 > Click any value in the **Info modal** to copy it to the clipboard.
 > On Windows instances, the Info modal also lets you decrypt the Administrator password using your PEM private key.
+
+---
+
+## 🔧 Making an EC2 Instance Available via AWS SSM
+
+Before SSM Manager can connect to an EC2 instance, three conditions must be met: the SSM Agent must be running on the instance, the instance must have outbound network access to AWS endpoints, and it must carry an IAM role with the right permissions.
+
+### 1 · SSM Agent
+
+The SSM Agent is the software that runs on the instance and communicates with the AWS Systems Manager service.
+
+**Pre-installed on these AMIs** (no action needed):
+- Amazon Linux 2 / Amazon Linux 2023
+- Ubuntu 16.04+ (AWS-published images)
+- Windows Server 2008 R2 and later (AWS-published images)
+
+**Must be installed manually** on:
+- RHEL, CentOS, SUSE, Debian, and any custom/community AMI
+
+Official installation guides:
+- [Install SSM Agent on Linux](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-install-ssm-agent.html)
+- [Install SSM Agent on Windows](https://docs.aws.amazon.com/systems-manager/latest/userguide/sysman-install-win.html)
+
+Verify the agent is running:
+```bash
+# Amazon Linux / RHEL / Ubuntu
+sudo systemctl status amazon-ssm-agent
+```
+```powershell
+# Windows
+Get-Service AmazonSSMAgent
+```
+
+---
+
+### 2 · Outbound Network Access
+
+The SSM Agent must be able to reach the AWS Systems Manager service endpoints. Two options:
+
+**Option A — Internet Gateway (simplest)**
+The instance is in a public subnet, or in a private subnet with a NAT Gateway that routes outbound traffic to the internet. No additional configuration needed.
+
+**Option B — VPC Endpoints (private subnet, no internet)**
+Create Interface VPC Endpoints for the following services in the instance's VPC:
+
+| Endpoint | Required |
+|----------|----------|
+| `com.amazonaws.<region>.ssm` | ✅ |
+| `com.amazonaws.<region>.ssmmessages` | ✅ |
+| `com.amazonaws.<region>.ec2messages` | ✅ |
+| `com.amazonaws.<region>.s3` | Optional (for S3-backed session logging) |
+
+> [!NOTE]
+> The instance does **not** need a public IP address when using VPC endpoints.
+
+Official reference: [Setting up VPC endpoints for Systems Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/setup-create-vpc.html)
+
+---
+
+### 3 · IAM Role & Policy
+
+The instance must have an IAM **instance profile** (an IAM role attached to the EC2 instance) with at least the following AWS managed policy:
+
+| Policy | ARN |
+|--------|-----|
+| `AmazonSSMManagedInstanceCore` | `arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore` |
+
+**How to attach it:**
+1. [IAM Console](https://console.aws.amazon.com/iam/) → **Roles** → **Create role** → Trusted entity: *EC2*
+2. Attach the policy `AmazonSSMManagedInstanceCore`
+3. Name the role (e.g. `EC2-SSM-Role`) and create it
+4. [EC2 Console](https://console.aws.amazon.com/ec2/) → select your instance → **Actions → Security → Modify IAM role** → select the role
+
+> [!TIP]
+> If the instance was already running before the role was attached, the SSM Agent picks up the new credentials automatically within a few minutes — no reboot required.
+
+Official reference: [Create an IAM instance profile for Systems Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/setup-instance-profile.html)
+
+---
+
+### ✅ Verification
+
+Once all three conditions are met, the instance appears in SSM Manager's list within 1–2 minutes. You can also verify from the CLI:
+
+```bash
+aws ssm describe-instance-information \
+  --query "InstanceInformationList[*].[InstanceId,PingStatus,PlatformName]" \
+  --output table
+```
+
+A `PingStatus` of `Online` means the instance is ready to connect.
+
+Official reference: [Verify SSM Agent connectivity](https://docs.aws.amazon.com/systems-manager/latest/userguide/ssm-agent-status-and-restart.html)
 
 ---
 
