@@ -328,8 +328,15 @@ The script:
 
 If SSM Manager has saved you time and made your AWS workflow easier, consider supporting its development:
 
-- [☕ Buy me a coffee](https://www.buymeacoffee.com/ssmmanager)
-- [💰 Donate via PayPal](https://www.paypal.me/mauroarduini82)
+<p align="center">
+  <a href="https://www.buymeacoffee.com/ssmmanager">
+    <img src="https://img.shields.io/badge/Buy%20me%20a%20coffee-ffdd00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy me a coffee"/>
+  </a>
+  &nbsp;
+  <a href="https://www.paypal.me/mauroarduini82">
+    <img src="https://img.shields.io/badge/Donate%20via%20PayPal-00457C?style=for-the-badge&logo=paypal&logoColor=white" alt="Donate via PayPal"/>
+  </a>
+</p>
 
 Every contribution — however small — helps keep the project alive and free.
 
