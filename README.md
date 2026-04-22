@@ -13,6 +13,7 @@ A desktop application for managing SSM sessions on AWS cloud with a user-friendl
     - [Additional Features](#additional-features)
   - [Requirements](#Requirements)
   - [Installation](#installation)
+  - [Why is the installer not signed?](#why-is-the-installer-not-signed)
   - [Windows Security Warning](#windows-security-warning)
   - [Usage](#usage)
   - [Development](#development)
@@ -111,6 +112,31 @@ SSM Manager is a Windows desktop application that provides a graphical interface
 8. Verify proper IAM permissions for SSM sessions.
 
 
+## Why is the installer not signed?
+
+Digital code-signing certificates (especially EV certificates trusted by Windows SmartScreen) cost hundreds of euros per year. To keep SSM Manager **100% free and open-source**, I chose not to purchase one.
+
+**How to trust the installer without a signature:**
+
+1. **Verify the SHA-256 checksum** — every release includes a `checksums.txt` file next to the installer. Compare the hash before running:
+   ```powershell
+   # PowerShell
+   (Get-FileHash "SSM-Manager-v2.1-setup.exe" -Algorithm SHA256).Hash.ToLower()
+   # Must match the hash in checksums.txt
+   ```
+   ```bash
+   # bash / WSL
+   sha256sum SSM-Manager-v2.1-setup.exe
+   ```
+
+2. **Check the VirusTotal report** — each GitHub release includes a VirusTotal link. Seeing "0/70 engines detected this file" is the best reassurance for a security-conscious sysadmin.
+
+3. **Build from source yourself** — the full build takes less than 5 minutes. See [Building from Source](#building-from-source) below.
+
+4. **Read the source code** — every line is open and auditable in this repository.
+
+---
+
 ## Windows Security Warning
 
 > 🇬🇧 **English**
@@ -170,20 +196,31 @@ python app.py
 
 ### Building from Source
 
-Requirements: Python 3.12+, [Inno Setup 6](https://jrsoftware.org/isdl.php) installed.
+Don't want to trust a pre-built binary? Build it yourself in under 5 minutes.
+
+**Prerequisites:** Python 3.12+, [Inno Setup 6](https://jrsoftware.org/isdl.php)
 
 ```powershell
-# Activate the virtual environment
+# 1. Clone the repo
+git clone https://github.com/mauroo82/ssm-manager.git
+cd ssm-manager
+
+# 2. Create and activate a virtual environment
+python -m venv .venv
 .venv\Scripts\activate
 
-# Run the build script (cleans previous output, builds exe + installer)
+# 3. Install dependencies
+pip install -r requirements.txt
+
+# 4. Build the exe + installer (auto-generates checksums.txt too)
 .\build.ps1
 ```
 
-The script will:
-1. Clean `build/`, `dist/` and `installer/` folders
-2. Run PyInstaller to produce `dist\SSM Manager\`
-3. Run Inno Setup to produce `installer\SSM-Manager-vX.Y-setup.exe`
+The script:
+1. Cleans `build/`, `dist/`, `installer/`
+2. Runs PyInstaller → `dist\SSM Manager\`
+3. Runs Inno Setup → `installer\SSM-Manager-vX.Y-setup.exe`
+4. Generates `installer\checksums.txt` with the SHA-256 hash of the installer
 
 > **Note:** The build requires `--collect-all pythonnet` and `--collect-all clr_loader` flags.
 > Without these, pywebview crashes at startup on Windows. These flags are already included in `build.ps1`.
