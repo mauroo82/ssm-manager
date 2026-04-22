@@ -129,7 +129,7 @@ Digital code-signing certificates (especially EV certificates trusted by Windows
    sha256sum SSM-Manager-v2.1-setup.exe
    ```
 
-2. **Check the VirusTotal report** — each GitHub release includes a VirusTotal link. Seeing "0/70 engines detected this file" is the best reassurance for a security-conscious sysadmin.
+2. **Scan on VirusTotal** — upload the installer to [virustotal.com](https://www.virustotal.com) (free, no account needed). Seeing "0/70 engines detected this file" is the best reassurance for a security-conscious sysadmin.
 
 3. **Build from source yourself** — the full build takes less than 5 minutes. See [Building from Source](#building-from-source) below.
 
