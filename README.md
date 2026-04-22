@@ -45,6 +45,7 @@ No terminal juggling. No forgotten flags. Just click and connect.
 - [📖 Usage](#-usage)
 - [🔧 Making an EC2 Instance Available via AWS SSM](#-making-an-ec2-instance-available-via-aws-ssm)
 - [🔨 Building from Source](#-building-from-source)
+- [❤️ Support the Project](#️-support-the-project)
 - [🤝 Contributing](#-contributing)
 - [🐛 Bug Reports](#-bug-reports)
 - [📄 License](#-license)
@@ -320,6 +321,17 @@ The script:
 > [!IMPORTANT]
 > The build requires `--collect-all pythonnet` and `--collect-all clr_loader` flags.
 > Without these, pywebview crashes at startup on Windows. Both flags are already set in `build.ps1`.
+
+---
+
+## ❤️ Support the Project
+
+If SSM Manager has saved you time and made your AWS workflow easier, consider supporting its development:
+
+- [☕ Buy me a coffee](https://www.buymeacoffee.com/ssmmanager)
+- [💰 Donate via PayPal](https://www.paypal.me/mauroarduini82)
+
+Every contribution — however small — helps keep the project alive and free.
 
 ---
 
