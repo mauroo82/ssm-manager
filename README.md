@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="image/screenshot4.jpg" width="760" alt="SSM Manager screenshot"/>
+<img src="image/snapshot-2.1.png" width="760" alt="SSM Manager screenshot"/>
 
 # SSM Manager
 
