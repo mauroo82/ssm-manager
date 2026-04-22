@@ -33,4 +33,13 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Generate SHA-256 checksum for the installer
+$exeName = "SSM-Manager-v2.1-setup.exe"
+$exePath = "installer\$exeName"
+$hash    = (Get-FileHash $exePath -Algorithm SHA256).Hash.ToLower()
+$checksumLine = "$hash  $exeName"
+Set-Content "installer\checksums.txt" $checksumLine -Encoding utf8
+Write-Host "Checksum written to installer\checksums.txt" -ForegroundColor Cyan
+Write-Host "SHA-256: $hash" -ForegroundColor Cyan
+
 Write-Host "Done! Installer ready in: installer\SSM-Manager-v2.1-setup.exe" -ForegroundColor Green
